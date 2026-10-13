@@ -1,9 +1,12 @@
 package com.scenefinder.ui
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.Surface
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -109,8 +112,12 @@ class MainActivity : ComponentActivity() {
     lateinit var settings: AppSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
+        applyNativeMaxRefreshRate()
         handleArmIntent(intent)
         handleOAuthCallback(intent)
 
@@ -131,8 +138,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        applyNativeMaxRefreshRate()
+    }
+
     override fun onResume() {
         super.onResume()
+        applyNativeMaxRefreshRate()
         if (PermissionHelper.canDrawOverlays(this) && settings.sidePanelEnabled.value) {
             SidePanelOverlayService.start(this)
         }
@@ -256,6 +269,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun applyNativeMaxRefreshRate() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val display = this.display
+                val modes = display?.supportedModes ?: emptyArray()
+                val highestMode = modes.maxByOrNull { it.refreshRate }
+                if (highestMode != null) {
+                    val lp = window.attributes
+                    lp.preferredDisplayModeId = highestMode.modeId
+                    window.attributes = lp
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                @Suppress("DEPRECATION")
+                val modes = windowManager.defaultDisplay?.supportedModes ?: emptyArray()
+                val highestMode = modes.maxByOrNull { it.refreshRate }
+                if (highestMode != null) {
+                    val lp = window.attributes
+                    lp.preferredDisplayModeId = highestMode.modeId
+                    window.attributes = lp
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("RefreshRate", "Failed to set display refresh rate: ${e.message}")
+        }
+    }
+
     companion object {
         const val ACTION_ARM = "com.scenefinder.ACTION_ARM"
     }
@@ -299,6 +338,7 @@ private fun MainAppScaffold(
 
     Scaffold(
         containerColor = IGBlack,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             Column(
                 modifier = Modifier
@@ -376,36 +416,30 @@ private fun MainAppScaffold(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(bottom = paddingValues.calculateBottomPadding())
                 .background(IGBlack)
         ) {
-            Crossfade(
-                targetState = selectedIndex,
-                animationSpec = tween(120),
-                label = "nav_crossfade"
-            ) { idx ->
-                when (idx) {
-                    0 -> HistoryScreen(
-                        dao = dao,
-                        repository = repository,
-                        settings = settings
-                    )
-                    1 -> HistoryScreen(
-                        dao = dao,
-                        repository = repository,
-                        settings = settings,
-                        startInSearch = true,
-                        onBackToHome = {
-                            if (tabBackStack.size > 1) {
-                                tabBackStack.removeAt(tabBackStack.lastIndex)
-                            } else {
-                                navigateToTab(0)
-                            }
+            when (selectedIndex) {
+                0 -> HistoryScreen(
+                    dao = dao,
+                    repository = repository,
+                    settings = settings
+                )
+                1 -> HistoryScreen(
+                    dao = dao,
+                    repository = repository,
+                    settings = settings,
+                    startInSearch = true,
+                    onBackToHome = {
+                        if (tabBackStack.size > 1) {
+                            tabBackStack.removeAt(tabBackStack.lastIndex)
+                        } else {
+                            navigateToTab(0)
                         }
-                    )
-                    2 -> OnboardingScreen(onContinueToDashboard = { navigateToTab(0) })
-                    3 -> SettingsScreen(settings = settings, repository = repository)
-                }
+                    }
+                )
+                2 -> OnboardingScreen(onContinueToDashboard = { navigateToTab(0) })
+                3 -> SettingsScreen(settings = settings, repository = repository)
             }
         }
     }

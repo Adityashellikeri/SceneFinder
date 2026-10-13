@@ -29,6 +29,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -83,6 +88,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.scenefinder.data.local.dao.EnrichedMediaDao
 import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.data.prefs.AppSettings
@@ -148,7 +155,6 @@ fun HistoryScreen(
 
     var itemToSaveWithStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
-    var visibleRowsCount by remember { mutableStateOf(10) }
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchingOnline by remember { mutableStateOf(false) }
@@ -195,21 +201,6 @@ fun HistoryScreen(
     val anilistToken by settings.anilistToken.collectAsState()
     var isCloudSyncing by remember { mutableStateOf(false) }
     val savedIds = remember(historyList) { historyList.map { it.id }.toHashSet() }
-
-    // Silent auto-sync on opening screen so changes from website are fetched automatically
-    LaunchedEffect(Unit) {
-        if (anilistToken.isNotBlank() || (tmdbSessionId.isNotBlank() && tmdbAccountId > 0)) {
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
-                if (anilistToken.isNotBlank()) {
-                    try { repository.syncAniListLibrary(anilistToken) } catch (_: Exception) {}
-                }
-                if (tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0) {
-                    val effectiveKey = apiKey.ifBlank { MediaEnrichmentRepository.DEFAULT_TMDB_API_KEY }
-                    try { repository.syncTmdbLibrary(effectiveKey, tmdbSessionId, tmdbAccountId) } catch (_: Exception) {}
-                }
-            }
-        }
-    }
 
     fun triggerCloudSync() {
         if (anilistToken.isBlank() && (tmdbSessionId.isBlank() || tmdbSessionId.startsWith("__pending__:"))) {
@@ -348,13 +339,7 @@ fun HistoryScreen(
         list
     }
 
-    val allLibraryPairs = remember(filteredLibrary) {
-        filteredLibrary.chunked(3)
-    }
-
-    val displayedLibraryPairs = remember(allLibraryPairs, visibleRowsCount) {
-        allLibraryPairs.take(visibleRowsCount)
-    }
+    val listState = rememberLazyGridState()
 
     // Filter search results by categorical options
     val displayedSearchResults = remember(searchResults, selectedSearchCategory) {
@@ -392,12 +377,16 @@ fun HistoryScreen(
         }
     }
 
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        state = listState,
         modifier = modifier.fillMaxSize().background(IGBlack),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         // Top bar
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             IGTopBar(
                 isSearchActive = isSearchBarActive,
                 searchQuery = searchQuery,
@@ -430,7 +419,7 @@ fun HistoryScreen(
 
         // Categorical options bar for Search: Anime, Manga, Movie, Manhwa, Web Series
         if (isSearchBarActive) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
@@ -462,7 +451,7 @@ fun HistoryScreen(
         if (isSearchBarActive && hasSearched) {
             // Predictive suggestion pills
             if (displayedPredictions.isNotEmpty()) {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Column(modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -515,13 +504,13 @@ fun HistoryScreen(
             }
 
             if (isSearchingOnline && displayedSearchResults.isEmpty()) {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = IGGradMid, strokeWidth = 2.5.dp, modifier = Modifier.size(36.dp))
                     }
                 }
             } else if (displayedSearchResults.isEmpty()) {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             val catLabel = if (selectedSearchCategory != "ALL") " $selectedSearchCategory" else ""
@@ -532,7 +521,7 @@ fun HistoryScreen(
                     }
                 }
             } else {
-                item {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -551,7 +540,11 @@ fun HistoryScreen(
                         }
                     }
                 }
-                items(displayedSearchResults, key = { it.id }) { result ->
+                items(
+                    items = displayedSearchResults,
+                    key = { it.id },
+                    span = { GridItemSpan(maxLineSpan) }
+                ) { result ->
                     val isAlreadySaved = savedIds.contains(result.id)
                     IGSearchResultRow(
                         media = result,
@@ -571,7 +564,6 @@ fun HistoryScreen(
                                     }
                                 }
                             } else {
-                                // Prompt user to select completed / plan to watch / dropped / watching
                                 itemToSaveWithStatus = result
                             }
                         },
@@ -586,7 +578,7 @@ fun HistoryScreen(
             }
         } else {
             // Status filter chips
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -610,7 +602,7 @@ fun HistoryScreen(
             }
 
             // Media type filter chips
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
@@ -641,42 +633,17 @@ fun HistoryScreen(
             }
 
             if (filteredLibrary.isEmpty()) {
-                item { IGEmptyState(selectedStatusFilter) }
+                item(span = { GridItemSpan(maxLineSpan) }) { IGEmptyState(selectedStatusFilter) }
             } else {
-                items(displayedLibraryPairs, key = { pair -> pair.firstOrNull()?.id ?: pair.hashCode() }) { pair ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        pair.forEach { media ->
-                            IGPosterCard(
-                                media = media,
-                                modifier = Modifier.weight(1f),
-                                onClick = { selectedMediaForDetail = media }
-                            )
-                        }
-                        if (pair.size == 1) Spacer(Modifier.weight(2f))
-                        else if (pair.size == 2) Spacer(Modifier.weight(1f))
-                    }
-                    Spacer(Modifier.height(3.dp))
-                }
-
-                // Instagram feed style progressive infinite loading
-                if (displayedLibraryPairs.size < allLibraryPairs.size) {
-                    item {
-                        LaunchedEffect(displayedLibraryPairs.size) {
-                            visibleRowsCount = (visibleRowsCount + 8).coerceAtMost(allLibraryPairs.size)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = IGGradMid,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
+                items(
+                    items = filteredLibrary,
+                    key = { it.id }
+                ) { media ->
+                    IGPosterCard(
+                        media = media,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { selectedMediaForDetail = media }
+                    )
                 }
             }
         }
@@ -936,6 +903,16 @@ private fun IGPosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val imageRequest = remember(media.posterUrl) {
+        ImageRequest.Builder(context)
+            .data(media.posterUrl)
+            .crossfade(false)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+
     Box(
         modifier = modifier
             .aspectRatio(0.67f)
@@ -945,7 +922,7 @@ private fun IGPosterCard(
     ) {
         if (!media.posterUrl.isNullOrBlank()) {
             AsyncImage(
-                model = media.posterUrl,
+                model = imageRequest,
                 contentDescription = media.cleanTitle,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
