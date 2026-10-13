@@ -1,4 +1,4 @@
-﻿package com.scenefinder.data.local.dao
+package com.scenefinder.data.local.dao
 
 import androidx.paging.PagingSource
 import androidx.room.Dao
@@ -30,6 +30,9 @@ interface EnrichedMediaDao {
     @Query("UPDATE enriched_media SET userStatus = :status, cachedAt = :cachedAt WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, cachedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE enriched_media SET userStatus = :status, cachedAt = :cachedAt WHERE id IN (:ids)")
+    suspend fun updateStatusForIds(ids: List<String>, status: String, cachedAt: Long = System.currentTimeMillis())
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: EnrichedMediaEntity)
 
@@ -38,6 +41,9 @@ interface EnrichedMediaDao {
 
     @Query("DELETE FROM enriched_media WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM enriched_media WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 
     @Query("DELETE FROM enriched_media")
     suspend fun clearAll()

@@ -114,6 +114,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+
 private val storyRingBrushHoriz = Brush.horizontalGradient(
     listOf(IGGradStart, IGGradMid, IGGradEnd)
 )
@@ -133,9 +151,135 @@ private fun getMediaTypeColor(type: String): Color = when (type) {
 
 private fun getStatusColor(status: String?): Color = when (status) {
     "CURRENT" -> IGBlue
+    "PLANNING" -> Color(0xFFA855F7)
     "COMPLETED" -> IGGreen
     "DROPPED" -> IGRed
-    else -> IGTextTertiary
+    else -> Color(0x33FFFFFF)
+}
+
+@Composable
+private fun ActionStatusChip(
+    label: String,
+    color: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = color.copy(alpha = 0.16f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.5f)),
+        modifier = Modifier.height(32.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = color,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = label,
+                color = color,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun IGBatchActionBar(
+    selectedCount: Int,
+    totalCount: Int,
+    onSelectAllToggle: () -> Unit,
+    onCancel: () -> Unit,
+    onMarkCompleted: () -> Unit,
+    onMarkWatching: () -> Unit,
+    onMarkPlanToWatch: () -> Unit,
+    onMarkDropped: () -> Unit,
+    onRemove: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(IGCard)
+            .statusBarsPadding()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Outlined.Close, contentDescription = "Cancel", tint = IGTextPrimary)
+            }
+            Text(
+                text = "$selectedCount Selected",
+                color = IGTextPrimary,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onSelectAllToggle) {
+                Icon(
+                    imageVector = if (selectedCount == totalCount) Icons.Default.Deselect else Icons.Default.SelectAll,
+                    contentDescription = if (selectedCount == totalCount) "Deselect All" else "Select All",
+                    tint = IGTextPrimary
+                )
+            }
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = IGRed)
+            }
+        }
+
+        // Quick status actions row
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                ActionStatusChip(
+                    label = "Watching",
+                    color = IGBlue,
+                    icon = Icons.Default.PlayArrow,
+                    onClick = onMarkWatching
+                )
+            }
+            item {
+                ActionStatusChip(
+                    label = "Plan to Watch",
+                    color = Color(0xFFA855F7),
+                    icon = Icons.Default.BookmarkAdd,
+                    onClick = onMarkPlanToWatch
+                )
+            }
+            item {
+                ActionStatusChip(
+                    label = "Completed",
+                    color = IGGreen,
+                    icon = Icons.Default.CheckCircle,
+                    onClick = onMarkCompleted
+                )
+            }
+            item {
+                ActionStatusChip(
+                    label = "Dropped",
+                    color = IGRed,
+                    icon = Icons.Default.Cancel,
+                    onClick = onMarkDropped
+                )
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(IGDivider))
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -156,7 +300,21 @@ fun HistoryScreen(
 
     var itemToSaveWithStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
-    val onCardClick = remember { { item: EnrichedMediaEntity -> selectedMediaForDetail = item } }
+    var selectedMediaIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val isSelectionMode = selectedMediaIds.isNotEmpty()
+    val onCardClick = remember(isSelectionMode) {
+        { item: EnrichedMediaEntity ->
+            if (isSelectionMode) {
+                selectedMediaIds = if (selectedMediaIds.contains(item.id)) {
+                    selectedMediaIds - item.id
+                } else {
+                    selectedMediaIds + item.id
+                }
+            } else {
+                selectedMediaForDetail = item
+            }
+        }
+    }
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchingOnline by remember { mutableStateOf(false) }
@@ -225,9 +383,11 @@ fun HistoryScreen(
         }
     }
 
-    // Handle back button on navigation: return to previous place or home page
-    BackHandler(enabled = isSearchBarActive || searchQuery.isNotEmpty()) {
-        if (searchQuery.isNotEmpty()) {
+    // Handle back button on navigation: return to previous place or exit selection
+    BackHandler(enabled = isSelectionMode || isSearchBarActive || searchQuery.isNotEmpty()) {
+        if (isSelectionMode) {
+            selectedMediaIds = emptySet()
+        } else if (searchQuery.isNotEmpty()) {
             searchQuery = ""
             hasSearched = false
             searchResults = emptyList()
@@ -341,7 +501,7 @@ fun HistoryScreen(
         list
     }
 
-    val pageSize = 24
+    val pageSize = 60
     var displayCount by remember(selectedStatusFilter, selectedMediaTypeFilter) { mutableIntStateOf(pageSize) }
     val displayedLibrary = remember(filteredLibrary, displayCount) {
         filteredLibrary.take(displayCount)
@@ -393,36 +553,165 @@ fun HistoryScreen(
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        // Top bar
+        // Top bar: either Batch Action Bar (in selection mode) or IGTopBar
         item(span = { GridItemSpan(maxLineSpan) }) {
-            IGTopBar(
-                isSearchActive = isSearchBarActive,
-                searchQuery = searchQuery,
-                onSearchQueryChange = { q ->
-                    searchQuery = q
-                    if (q.isBlank()) {
-                        hasSearched = false
-                        searchResults = emptyList()
-                        predictedSuggestions = emptyList()
+            if (isSelectionMode) {
+                IGBatchActionBar(
+                    selectedCount = selectedMediaIds.size,
+                    totalCount = displayedLibrary.size,
+                    onSelectAllToggle = {
+                        selectedMediaIds = if (selectedMediaIds.size == displayedLibrary.size) {
+                            emptySet()
+                        } else {
+                            displayedLibrary.map { it.id }.toSet()
+                        }
+                    },
+                    onCancel = { selectedMediaIds = emptySet() },
+                    onMarkCompleted = {
+                        val targets = selectedMediaIds.toList()
+                        val targetEntities = displayedLibrary.filter { targets.contains(it.id) }
+                        scope.launch(Dispatchers.IO) {
+                            dao.updateStatusForIds(targets, "COMPLETED")
+                            for (entity in targetEntities) {
+                                try {
+                                    repository.updateMediaStatus(
+                                        media = entity,
+                                        newStatus = "COMPLETED",
+                                        anilistToken = anilistToken,
+                                        tmdbApiKey = apiKey,
+                                        tmdbSessionId = tmdbSessionId,
+                                        tmdbAccountId = tmdbAccountId
+                                    )
+                                } catch (e: Exception) { }
+                            }
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Marked ${targets.size} as Completed", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        selectedMediaIds = emptySet()
+                    },
+                    onMarkWatching = {
+                        val targets = selectedMediaIds.toList()
+                        val targetEntities = displayedLibrary.filter { targets.contains(it.id) }
+                        scope.launch(Dispatchers.IO) {
+                            dao.updateStatusForIds(targets, "CURRENT")
+                            for (entity in targetEntities) {
+                                try {
+                                    repository.updateMediaStatus(
+                                        media = entity,
+                                        newStatus = "CURRENT",
+                                        anilistToken = anilistToken,
+                                        tmdbApiKey = apiKey,
+                                        tmdbSessionId = tmdbSessionId,
+                                        tmdbAccountId = tmdbAccountId
+                                    )
+                                } catch (e: Exception) { }
+                            }
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Marked ${targets.size} as Watching", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        selectedMediaIds = emptySet()
+                    },
+                    onMarkPlanToWatch = {
+                        val targets = selectedMediaIds.toList()
+                        val targetEntities = displayedLibrary.filter { targets.contains(it.id) }
+                        scope.launch(Dispatchers.IO) {
+                            dao.updateStatusForIds(targets, "PLANNING")
+                            for (entity in targetEntities) {
+                                try {
+                                    repository.updateMediaStatus(
+                                        media = entity,
+                                        newStatus = "PLANNING",
+                                        anilistToken = anilistToken,
+                                        tmdbApiKey = apiKey,
+                                        tmdbSessionId = tmdbSessionId,
+                                        tmdbAccountId = tmdbAccountId
+                                    )
+                                } catch (e: Exception) { }
+                            }
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Marked ${targets.size} as Plan to Watch", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        selectedMediaIds = emptySet()
+                    },
+                    onMarkDropped = {
+                        val targets = selectedMediaIds.toList()
+                        val targetEntities = displayedLibrary.filter { targets.contains(it.id) }
+                        scope.launch(Dispatchers.IO) {
+                            dao.updateStatusForIds(targets, "DROPPED")
+                            for (entity in targetEntities) {
+                                try {
+                                    repository.updateMediaStatus(
+                                        media = entity,
+                                        newStatus = "DROPPED",
+                                        anilistToken = anilistToken,
+                                        tmdbApiKey = apiKey,
+                                        tmdbSessionId = tmdbSessionId,
+                                        tmdbAccountId = tmdbAccountId
+                                    )
+                                } catch (e: Exception) { }
+                            }
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Marked ${targets.size} as Dropped", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        selectedMediaIds = emptySet()
+                    },
+                    onRemove = {
+                        val targets = selectedMediaIds.toList()
+                        val targetEntities = displayedLibrary.filter { targets.contains(it.id) }
+                        scope.launch(Dispatchers.IO) {
+                            dao.deleteByIds(targets)
+                            for (entity in targetEntities) {
+                                try {
+                                    repository.removeFromLibrary(
+                                        media = entity,
+                                        anilistToken = anilistToken,
+                                        tmdbApiKey = apiKey,
+                                        tmdbSessionId = tmdbSessionId,
+                                        tmdbAccountId = tmdbAccountId
+                                    )
+                                } catch (e: Exception) { }
+                            }
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Removed ${targets.size} items", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        selectedMediaIds = emptySet()
                     }
-                },
-                onSearchToggle = {
-                    isSearchBarActive = !isSearchBarActive
-                    if (!isSearchBarActive) {
-                        searchQuery = ""
-                        hasSearched = false
-                        searchResults = emptyList()
-                        predictedSuggestions = emptyList()
-                    }
-                },
-                onSearch = ::performOnlineSearch,
-                onClearAll = { scope.launch(Dispatchers.IO) { dao.clearAll() } },
-                showClearAll = historyList.isNotEmpty() && !hasSearched,
-                focusRequester = searchFocusRequester,
-                isSearchingOnline = isSearchingOnline,
-                isCloudSyncing = isCloudSyncing,
-                onSync = ::triggerCloudSync
-            )
+                )
+            } else {
+                IGTopBar(
+                    isSearchActive = isSearchBarActive,
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { q ->
+                        searchQuery = q
+                        if (q.isBlank()) {
+                            hasSearched = false
+                            searchResults = emptyList()
+                            predictedSuggestions = emptyList()
+                        }
+                    },
+                    onSearchToggle = {
+                        isSearchBarActive = !isSearchBarActive
+                        if (!isSearchBarActive) {
+                            searchQuery = ""
+                            hasSearched = false
+                            searchResults = emptyList()
+                            predictedSuggestions = emptyList()
+                        }
+                    },
+                    onSearch = ::performOnlineSearch,
+                    onClearAll = { scope.launch(Dispatchers.IO) { dao.clearAll() } },
+                    showClearAll = historyList.isNotEmpty() && !hasSearched,
+                    focusRequester = searchFocusRequester,
+                    isSearchingOnline = isSearchingOnline,
+                    isCloudSyncing = isCloudSyncing,
+                    onSync = ::triggerCloudSync
+                )
+            }
         }
 
         // Categorical options bar for Search: Anime, Manga, Movie, Manhwa, Web Series
@@ -645,12 +934,24 @@ fun HistoryScreen(
             } else {
                 items(
                     items = displayedLibrary,
-                    key = { it.id }
+                    key = { it.id },
+                    contentType = { "poster_card" }
                 ) { media ->
+                    val isSelected = selectedMediaIds.contains(media.id)
                     IGPosterCard(
                         media = media,
+                        isSelected = isSelected,
+                        isSelectionMode = isSelectionMode,
+                        showStatusBorder = selectedStatusFilter == "ALL",
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = onCardClick
+                        onClick = onCardClick,
+                        onLongClick = { item ->
+                            selectedMediaIds = if (selectedMediaIds.contains(item.id)) {
+                                selectedMediaIds - item.id
+                            } else {
+                                selectedMediaIds + item.id
+                            }
+                        }
                     )
                 }
 
@@ -925,18 +1226,52 @@ private fun IGTopBar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun IGPosterCard(
     media: EnrichedMediaEntity,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    showStatusBorder: Boolean,
     onClick: (EnrichedMediaEntity) -> Unit,
+    onLongClick: (EnrichedMediaEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // Tactile press & selection scale animation
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else if (isSelected) 0.95f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "poster_scale"
+    )
+
+    // Dynamic border color based on status or selection
+    val statusColor = remember(media.userStatus) { getStatusColor(media.userStatus) }
+    val targetBorderColor = when {
+        isSelected -> IGGradMid
+        showStatusBorder -> statusColor
+        else -> Color.Transparent
+    }
+    val targetBorderWidth = when {
+        isSelected -> 2.5.dp
+        showStatusBorder -> 2.dp
+        else -> 0.dp
+    }
+    val borderColor by animateColorAsState(targetBorderColor, tween(200), label = "border_color")
+
     val imageRequest = remember(media.posterUrl) {
         ImageRequest.Builder(context)
             .data(media.posterUrl)
             .size(360, 540)
             .crossfade(false)
+            .allowHardware(true)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .build()
@@ -944,10 +1279,30 @@ private fun IGPosterCard(
 
     Box(
         modifier = modifier
+            .scale(scale)
             .aspectRatio(0.67f)
-            .clip(RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(6.dp))
             .background(IGSurface)
-            .clickable { onClick(media) }
+            .then(
+                if (targetBorderWidth > 0.dp) {
+                    Modifier.border(targetBorderWidth, borderColor, RoundedCornerShape(6.dp))
+                } else Modifier
+            )
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    if (isSelectionMode) {
+                        onLongClick(media)
+                    } else {
+                        onClick(media)
+                    }
+                },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick(media)
+                }
+            )
     ) {
         if (!media.posterUrl.isNullOrBlank()) {
             AsyncImage(
@@ -997,16 +1352,42 @@ private fun IGPosterCard(
             }
         }
 
-        // Status indicator dot at top-right
-        val statusColor = remember(media.userStatus) { getStatusColor(media.userStatus) }
-        Box(
+        // Selection badge at top-left
+        AnimatedVisibility(
+            visible = isSelected,
+            enter = fadeIn(tween(150)) + scaleIn(tween(150)),
+            exit = androidx.compose.animation.fadeOut(tween(150)) + scaleOut(tween(150)),
             modifier = Modifier
                 .padding(6.dp)
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(statusColor)
-                .align(Alignment.TopEnd)
-        )
+                .align(Alignment.TopStart)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(IGGradMid),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+
+        // Status indicator dot at top-right (when not selected)
+        if (!isSelected) {
+            Box(
+                modifier = Modifier
+                    .padding(6.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(statusColor)
+                    .align(Alignment.TopEnd)
+            )
+        }
     }
 }
 

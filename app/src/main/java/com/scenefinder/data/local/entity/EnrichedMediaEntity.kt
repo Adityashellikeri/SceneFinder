@@ -1,8 +1,10 @@
 package com.scenefinder.data.local.entity
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+@Immutable
 @Entity(tableName = "enriched_media")
 data class EnrichedMediaEntity(
     @PrimaryKey
