@@ -805,7 +805,7 @@ class MediaEnrichmentRepository @Inject constructor(
                 }
             """.trimIndent()
 
-            var count = 0
+            val entitiesToInsert = mutableListOf<EnrichedMediaEntity>()
             for (mediaType in listOf("ANIME", "MANGA")) {
                 val resp = aniListApi.queryUserLibrary(
                     "Bearer $cleanToken",
@@ -855,12 +855,14 @@ class MediaEnrichmentRepository @Inject constructor(
                             userStatus = finalStatus,
                             cachedAt = finalCachedAt
                         )
-                        dao.insert(entity)
-                        count++
+                        entitiesToInsert.add(entity)
                     }
                 }
             }
-            count
+            if (entitiesToInsert.isNotEmpty()) {
+                dao.insertAll(entitiesToInsert)
+            }
+            entitiesToInsert.size
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             android.util.Log.e("AniListSync", "Failed to sync AniList library", e)
@@ -878,7 +880,7 @@ class MediaEnrichmentRepository @Inject constructor(
         accountId: Int
     ): Int {
         if (apiKey.isBlank() || sessionId.isBlank() || accountId < 0) return 0
-        var count = 0
+        val entitiesToInsert = mutableListOf<EnrichedMediaEntity>()
         try {
             // Fetch watchlist movies
             val moviesResp = tmdbAccountApi.getWatchlistMovies(accountId, apiKey, sessionId)
@@ -904,8 +906,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     userStatus = existing?.userStatus ?: "PLANNING",
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
-                dao.insert(entity)
-                count++
+                entitiesToInsert.add(entity)
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -936,8 +937,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     userStatus = existing?.userStatus ?: "PLANNING",
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
-                dao.insert(entity)
-                count++
+                entitiesToInsert.add(entity)
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -968,8 +968,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     userStatus = existing?.userStatus ?: "COMPLETED",
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
-                dao.insert(entity)
-                count++
+                entitiesToInsert.add(entity)
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -1000,14 +999,16 @@ class MediaEnrichmentRepository @Inject constructor(
                     userStatus = existing?.userStatus ?: "COMPLETED",
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
-                dao.insert(entity)
-                count++
+                entitiesToInsert.add(entity)
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             android.util.Log.e("TmdbSync", "Failed to sync TMDB favorite TV", e)
         }
-        return count
+        if (entitiesToInsert.isNotEmpty()) {
+            dao.insertAll(entitiesToInsert)
+        }
+        return entitiesToInsert.size
     }
 
     /**

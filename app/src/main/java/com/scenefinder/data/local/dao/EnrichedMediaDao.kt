@@ -32,6 +32,9 @@ interface EnrichedMediaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: EnrichedMediaEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(entities: List<EnrichedMediaEntity>)
+
     @Query("DELETE FROM enriched_media WHERE id = :id")
     suspend fun deleteById(id: String)
 

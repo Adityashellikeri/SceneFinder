@@ -111,6 +111,8 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var settings: AppSettings
 
+    private var lastAutoSyncTimestamp = 0L
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -167,23 +169,28 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Silent background sync of libraries so website changes reflect in the app
-        val anilistTok = settings.anilistToken.value.trim().removePrefix("Bearer ").trim()
-        val tmdbSess = settings.tmdbSessionId.value
-        val tmdbAcc = settings.tmdbAccountId.value
-        kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
-            if (anilistTok.isNotBlank()) {
-                try {
-                    repository.syncAniListLibrary(anilistTok)
-                } catch (e: Exception) {
-                    android.util.Log.e("AutoSync", "AniList auto-sync error", e)
+        // Silent background sync of libraries with cooldown so startup is 100% lag-free
+        val now = System.currentTimeMillis()
+        if (now - lastAutoSyncTimestamp > 5 * 60 * 1000L) {
+            lastAutoSyncTimestamp = now
+            val anilistTok = settings.anilistToken.value.trim().removePrefix("Bearer ").trim()
+            val tmdbSess = settings.tmdbSessionId.value
+            val tmdbAcc = settings.tmdbAccountId.value
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+                kotlinx.coroutines.delay(2000L)
+                if (anilistTok.isNotBlank()) {
+                    try {
+                        repository.syncAniListLibrary(anilistTok)
+                    } catch (e: Exception) {
+                        android.util.Log.e("AutoSync", "AniList auto-sync error", e)
+                    }
                 }
-            }
-            if (tmdbSess.isNotBlank() && !tmdbSess.startsWith("__pending__:") && tmdbAcc > 0) {
-                try {
-                    repository.syncTmdbLibrary(key, tmdbSess, tmdbAcc)
-                } catch (e: Exception) {
-                    android.util.Log.e("AutoSync", "TMDB auto-sync error", e)
+                if (tmdbSess.isNotBlank() && !tmdbSess.startsWith("__pending__:") && tmdbAcc > 0) {
+                    try {
+                        repository.syncTmdbLibrary(key, tmdbSess, tmdbAcc)
+                    } catch (e: Exception) {
+                        android.util.Log.e("AutoSync", "TMDB auto-sync error", e)
+                    }
                 }
             }
         }

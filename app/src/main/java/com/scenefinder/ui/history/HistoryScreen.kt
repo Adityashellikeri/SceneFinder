@@ -66,6 +66,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -337,6 +338,12 @@ fun HistoryScreen(
             }
         }
         list
+    }
+
+    val pageSize = 24
+    var displayCount by remember(selectedStatusFilter, selectedMediaTypeFilter) { mutableIntStateOf(pageSize) }
+    val displayedLibrary = remember(filteredLibrary, displayCount) {
+        filteredLibrary.take(displayCount)
     }
 
     val listState = rememberLazyGridState()
@@ -636,7 +643,7 @@ fun HistoryScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) { IGEmptyState(selectedStatusFilter) }
             } else {
                 items(
-                    items = filteredLibrary,
+                    items = displayedLibrary,
                     key = { it.id }
                 ) { media ->
                     IGPosterCard(
@@ -644,6 +651,26 @@ fun HistoryScreen(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { selectedMediaForDetail = media }
                     )
+                }
+
+                if (displayedLibrary.size < filteredLibrary.size) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        LaunchedEffect(Unit) {
+                            displayCount = (displayCount + pageSize).coerceAtMost(filteredLibrary.size)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = IGGradMid,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -907,6 +934,7 @@ private fun IGPosterCard(
     val imageRequest = remember(media.posterUrl) {
         ImageRequest.Builder(context)
             .data(media.posterUrl)
+            .size(360, 540)
             .crossfade(false)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
