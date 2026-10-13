@@ -754,6 +754,39 @@ fun SettingsScreen(
             }
         }
 
+        // Home page layout: Page-by-Page vs Continuous scroll
+        item {
+            val isPageWise by settings.isPageWiseLayout.collectAsState()
+            IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Page-by-Page Home Layout", fontWeight = FontWeight.SemiBold, color = IGTextPrimary, fontSize = 15.sp)
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            if (isPageWise) "Home library displayed page-by-page with Next/Prev page controls"
+                            else "Home library displayed in a continuous single-page feed",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = IGTextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = isPageWise,
+                        onCheckedChange = { settings.setPageWiseLayout(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = IGGradMid,
+                            uncheckedThumbColor = IGTextSecondary,
+                            uncheckedTrackColor = IGCard
+                        )
+                    )
+                }
+            }
+        }
+
         // Arm timeout
         item {
             IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {

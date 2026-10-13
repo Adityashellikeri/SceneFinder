@@ -117,17 +117,25 @@ import kotlinx.coroutines.withContext
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material.icons.automirrored.filled.NavigateBefore
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Deselect
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -501,10 +509,22 @@ fun HistoryScreen(
         list
     }
 
+    val isPageWise by settings.isPageWiseLayout.collectAsState()
+    val itemsPerPage = 24
+    var currentPage by remember(selectedStatusFilter, selectedMediaTypeFilter, isPageWise) { mutableIntStateOf(1) }
+    val totalPages = remember(filteredLibrary.size, itemsPerPage) {
+        maxOf(1, (filteredLibrary.size + itemsPerPage - 1) / itemsPerPage)
+    }
+    val safeCurrentPage = currentPage.coerceIn(1, totalPages)
+
     val pageSize = 60
     var displayCount by remember(selectedStatusFilter, selectedMediaTypeFilter) { mutableIntStateOf(pageSize) }
-    val displayedLibrary = remember(filteredLibrary, displayCount) {
-        filteredLibrary.take(displayCount)
+    val displayedLibrary = remember(filteredLibrary, isPageWise, safeCurrentPage, displayCount) {
+        if (isPageWise) {
+            filteredLibrary.drop((safeCurrentPage - 1) * itemsPerPage).take(itemsPerPage)
+        } else {
+            filteredLibrary.take(displayCount)
+        }
     }
 
     val listState = rememberLazyGridState()
@@ -545,14 +565,15 @@ fun HistoryScreen(
         }
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        state = listState,
-        modifier = modifier.fillMaxSize().background(IGBlack),
-        contentPadding = PaddingValues(bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
+    Box(modifier = modifier.fillMaxSize().background(IGBlack)) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            state = listState,
+            modifier = Modifier.fillMaxSize().background(IGBlack),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
         // Top bar: either Batch Action Bar (in selection mode) or IGTopBar
         item(span = { GridItemSpan(maxLineSpan) }) {
             if (isSelectionMode) {
@@ -709,6 +730,12 @@ fun HistoryScreen(
                     focusRequester = searchFocusRequester,
                     isSearchingOnline = isSearchingOnline,
                     isCloudSyncing = isCloudSyncing,
+                    isPageWise = isPageWise,
+                    onTogglePageWise = {
+                        val next = !isPageWise
+                        settings.setPageWiseLayout(next)
+                        Toast.makeText(context, if (next) "Page-by-page mode enabled" else "Continuous scroll mode enabled", Toast.LENGTH_SHORT).show()
+                    },
                     onSync = ::triggerCloudSync
                 )
             }
@@ -955,28 +982,139 @@ fun HistoryScreen(
                     )
                 }
 
-                if (displayedLibrary.size < filteredLibrary.size) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        LaunchedEffect(Unit) {
-                            displayCount = (displayCount + pageSize).coerceAtMost(filteredLibrary.size)
+                if (isPageWise) {
+                    if (totalPages > 1) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 18.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Previous Page Button
+                                FilledTonalIconButton(
+                                    onClick = {
+                                        if (safeCurrentPage > 1) {
+                                            currentPage = safeCurrentPage - 1
+                                            scope.launch { listState.scrollToItem(0) }
+                                        }
+                                    },
+                                    enabled = safeCurrentPage > 1,
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = IGCard,
+                                        contentColor = IGTextPrimary,
+                                        disabledContainerColor = IGCard.copy(alpha = 0.35f),
+                                        disabledContentColor = IGTextTertiary
+                                    ),
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.NavigateBefore, "Previous Page")
+                                }
+
+                                Spacer(Modifier.width(14.dp))
+
+                                // Current Page Pill Badge
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = IGCard,
+                                    border = BorderStroke(1.dp, IGDivider)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Page ", fontSize = 13.sp, color = IGTextSecondary)
+                                        Text("$safeCurrentPage", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = IGGradMid)
+                                        Text(" of $totalPages", fontSize = 13.sp, color = IGTextSecondary)
+                                        Text(" (${filteredLibrary.size})", fontSize = 11.sp, color = IGTextTertiary)
+                                    }
+                                }
+
+                                Spacer(Modifier.width(14.dp))
+
+                                // Next Page Button
+                                FilledTonalIconButton(
+                                    onClick = {
+                                        if (safeCurrentPage < totalPages) {
+                                            currentPage = safeCurrentPage + 1
+                                            scope.launch { listState.scrollToItem(0) }
+                                        }
+                                    },
+                                    enabled = safeCurrentPage < totalPages,
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = IGCard,
+                                        contentColor = IGTextPrimary,
+                                        disabledContainerColor = IGCard.copy(alpha = 0.35f),
+                                        disabledContentColor = IGTextTertiary
+                                    ),
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.NavigateNext, "Next Page")
+                                }
+                            }
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = IGGradMid,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(20.dp)
-                            )
+                    }
+                } else {
+                    if (displayedLibrary.size < filteredLibrary.size) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            LaunchedEffect(Unit) {
+                                displayCount = (displayCount + pageSize).coerceAtMost(filteredLibrary.size)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = IGGradMid,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
+
+    // Scroll-to-Top Floating Button
+    val showScrollToTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 4 }
+    }
+    AnimatedVisibility(
+        visible = showScrollToTop,
+        enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { it / 2 } + scaleIn(tween(200)),
+        exit = fadeOut(tween(200)) + slideOutVertically(tween(200)) { it / 2 } + scaleOut(tween(200)),
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 16.dp, bottom = 80.dp)
+    ) {
+        Surface(
+            onClick = {
+                scope.launch {
+                    listState.animateScrollToItem(0)
+                }
+            },
+            shape = CircleShape,
+            color = IGCard.copy(alpha = 0.94f),
+            border = BorderStroke(1.dp, IGDivider),
+            shadowElevation = 8.dp,
+            modifier = Modifier.size(46.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Scroll to top",
+                    tint = IGTextPrimary,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+        }
+    }
+}
 
     // Modal dialog to view and update details/status for a library item
     selectedMediaForDetail?.let { detailItem ->
@@ -1147,6 +1285,8 @@ private fun IGTopBar(
     focusRequester: FocusRequester,
     isSearchingOnline: Boolean,
     isCloudSyncing: Boolean = false,
+    isPageWise: Boolean = false,
+    onTogglePageWise: () -> Unit = {},
     onSync: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth().background(IGBlack).statusBarsPadding()) {
@@ -1205,6 +1345,14 @@ private fun IGTopBar(
                     style = MaterialTheme.typography.headlineMedium.copy(brush = storyRingBrushHoriz),
                     modifier = Modifier.weight(1f)
                 )
+                IconButton(onClick = onTogglePageWise) {
+                    Icon(
+                        imageVector = Icons.Default.AutoStories,
+                        contentDescription = if (isPageWise) "Switch to Infinite Scroll" else "Switch to Page-Wise Mode",
+                        tint = if (isPageWise) IGGradMid else IGTextPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
                 IconButton(onClick = onSync) {
                     if (isCloudSyncing) {
                         CircularProgressIndicator(color = IGGradMid, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))

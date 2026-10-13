@@ -100,6 +100,14 @@ class AppSettings @Inject constructor(
         _armTimeoutSeconds.value = seconds
     }
 
+    private val _isPageWiseLayout = MutableStateFlow(prefs.getBoolean(KEY_PAGE_WISE_LAYOUT, false))
+    val isPageWiseLayout: StateFlow<Boolean> = _isPageWiseLayout.asStateFlow()
+
+    fun setPageWiseLayout(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PAGE_WISE_LAYOUT, enabled).apply()
+        _isPageWiseLayout.value = enabled
+    }
+
     companion object {
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
         private const val KEY_TMDB_SESSION_ID = "tmdb_session_id"
@@ -111,5 +119,6 @@ class AppSettings @Inject constructor(
         private const val KEY_AUTO_OVERLAY = "auto_overlay"
         private const val KEY_SIDE_PANEL = "side_panel_enabled"
         private const val KEY_ARM_TIMEOUT = "arm_timeout"
+        private const val KEY_PAGE_WISE_LAYOUT = "page_wise_layout"
     }
 }
