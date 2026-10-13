@@ -134,78 +134,82 @@ class MediaEnrichmentRepository @Inject constructor(
             else -> "PLANNING"
         }
 
-        if (media.sourceService == "AniList" && anilistToken.isNotBlank()) {
-            val numericId = media.id.substringAfterLast("_").toIntOrNull()
-            if (numericId != null) {
-                try {
-                    val mutation = """
-                        mutation (${"$"}mediaId: Int, ${"$"}status: MediaListStatus) {
-                          SaveMediaListEntry(mediaId: ${"$"}mediaId, status: ${"$"}status) {
-                            id
-                            status
-                          }
-                        }
-                    """.trimIndent()
-                    val resp = aniListApi.executeMutation(
-                        "Bearer $anilistToken",
-                        AniListGraphQLRequest(mutation, mapOf("mediaId" to numericId, "status" to anilistStatus))
+        val isAnime = media.mediaType.equals("Anime", ignoreCase = true)
+        val isManga = media.mediaType.equals("Manga", ignoreCase = true) || media.mediaType.equals("Manhwa", ignoreCase = true)
+        val cleanAniToken = anilistToken.trim().removePrefix("Bearer ").trim()
+
+        // 1. Anime / Manga: If AniList is connected, add to AniList ONLY! Do not add to TMDB.
+        if (isAnime || isManga || media.sourceService == "AniList") {
+            if (cleanAniToken.isNotBlank()) {
+                var aniId = if (media.sourceService == "AniList") {
+                    media.id.substringAfterLast("_").toIntOrNull()
+                } else null
+
+                if (aniId == null) {
+                    // Item was searched from TMDB or suggestion, resolve AniList ID
+                    val targetType = if (isAnime) MediaType.ANIME else MediaType.MANGA
+                    val aniMatch = searchAniList(
+                        MediaMatchCandidate(rawText = media.cleanTitle, cleanTitle = media.cleanTitle, mediaType = targetType),
+                        if (isAnime) "ANIME" else "MANGA"
                     )
-                    if (resp.data?.savedEntry != null) {
-                        cloudSynced = true
+                    aniId = aniMatch?.id?.substringAfterLast("_")?.toIntOrNull()
+                }
+
+                if (aniId != null) {
+                    try {
+                        val mutation = """
+                            mutation (${"$"}mediaId: Int, ${"$"}status: MediaListStatus) {
+                              SaveMediaListEntry(mediaId: ${"$"}mediaId, status: ${"$"}status) {
+                                id
+                                status
+                              }
+                            }
+                        """.trimIndent()
+                        val resp = aniListApi.executeMutation(
+                            "Bearer $cleanAniToken",
+                            AniListGraphQLRequest(mutation, mapOf("mediaId" to aniId, "status" to anilistStatus))
+                        )
+                        if (resp.data?.savedEntry != null) {
+                            cloudSynced = true
+                        } else if (resp.errors != null) {
+                            android.util.Log.e("Sync", "AniList error: ${resp.errors.map { it.message }}")
+                        }
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        android.util.Log.e("Sync", "AniList save failed", e)
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("Sync", "AniList save failed", e)
                 }
             }
-        } else if (media.sourceService == "TMDB" && tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0) {
+            // Return here so anime is never added to TMDB if AniList is available
+            return cloudSynced
+        }
+
+        // 2. Movies / TV Shows / Web Series: Sync to TMDB
+        if (tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0) {
             val numericId = media.id.substringAfterLast("_").toIntOrNull()
-            if (numericId != null) {
+            if (numericId != null && media.sourceService == "TMDB") {
                 val isMovie = media.mediaType.equals("Movie", ignoreCase = true) || media.id.startsWith("tmdb_movie_")
                 val type = if (isMovie) "movie" else "tv"
                 val key = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
                 cloudSynced = updateTmdbWatchlist(key, tmdbSessionId, tmdbAccountId, type, numericId, true)
-            }
-        } else if (anilistToken.isNotBlank() && (media.mediaType.equals("Anime", ignoreCase = true) || media.mediaType.equals("Manga", ignoreCase = true) || media.mediaType.equals("Manhwa", ignoreCase = true))) {
-            // Intelligent fallback: sync anime/manga to AniList even if originated from another provider
-            try {
-                val aniType = if (media.mediaType.equals("Anime", ignoreCase = true)) MediaType.ANIME else MediaType.MANGA
-                val aniTypeStr = if (aniType == MediaType.ANIME) "ANIME" else "MANGA"
-                val aniMatch = searchAniList(MediaMatchCandidate(rawText = media.cleanTitle, cleanTitle = media.cleanTitle, mediaType = aniType), aniTypeStr)
-                val aniId = aniMatch?.id?.substringAfterLast("_")?.toIntOrNull()
-                if (aniId != null) {
-                    val mutation = """
-                        mutation (${"$"}mediaId: Int, ${"$"}status: MediaListStatus) {
-                          SaveMediaListEntry(mediaId: ${"$"}mediaId, status: ${"$"}status) {
-                            id
-                            status
-                          }
-                        }
-                    """.trimIndent()
-                    val resp = aniListApi.executeMutation(
-                        "Bearer $anilistToken",
-                        AniListGraphQLRequest(mutation, mapOf("mediaId" to aniId, "status" to anilistStatus))
+            } else {
+                // Intelligent fallback: search TMDB
+                try {
+                    val tmdbMatch = searchTmdb(
+                        MediaMatchCandidate(rawText = media.cleanTitle, cleanTitle = media.cleanTitle, mediaType = MediaType.MOVIE),
+                        tmdbApiKey
                     )
-                    if (resp.data?.savedEntry != null) {
-                        cloudSynced = true
+                    val tmdbId = tmdbMatch?.id?.substringAfterLast("_")?.toIntOrNull()
+                    if (tmdbId != null) {
+                        val isMovie = tmdbMatch.mediaType.equals("Movie", ignoreCase = true)
+                        val type = if (isMovie) "movie" else "tv"
+                        val key = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+                        cloudSynced = updateTmdbWatchlist(key, tmdbSessionId, tmdbAccountId, type, tmdbId, true)
                     }
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    android.util.Log.e("Sync", "TMDB fallback save failed", e)
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("Sync", "AniList fallback save failed", e)
-            }
-        } else if (tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0 &&
-            (media.mediaType.equals("Movie", ignoreCase = true) || media.mediaType.contains("TV", ignoreCase = true))) {
-            // Intelligent fallback: sync movie/TV to TMDB
-            try {
-                val tmdbMatch = searchTmdb(MediaMatchCandidate(rawText = media.cleanTitle, cleanTitle = media.cleanTitle, mediaType = MediaType.MOVIE), tmdbApiKey)
-                val tmdbId = tmdbMatch?.id?.substringAfterLast("_")?.toIntOrNull()
-                if (tmdbId != null) {
-                    val isMovie = tmdbMatch.mediaType.equals("Movie", ignoreCase = true)
-                    val type = if (isMovie) "movie" else "tv"
-                    val key = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
-                    cloudSynced = updateTmdbWatchlist(key, tmdbSessionId, tmdbAccountId, type, tmdbId, true)
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("Sync", "TMDB fallback save failed", e)
             }
         }
         return cloudSynced
@@ -219,12 +223,25 @@ class MediaEnrichmentRepository @Inject constructor(
         tmdbSessionId: String = "",
         tmdbAccountId: Int = -1
     ): Boolean {
-        // 1. Update local database
-        dao.updateStatus(media.id, newStatus)
+        // 1. Update local database with new status and fresh timestamp so it stays on top of feed
+        val now = System.currentTimeMillis()
+        dao.updateStatus(media.id, newStatus, now)
 
-        // 2. Sync to AniList if token is provided and item is from AniList
-        if (media.sourceService == "AniList" && anilistToken.isNotBlank()) {
-            val numericId = media.id.substringAfterLast("_").toIntOrNull()
+        val isAnime = media.mediaType.equals("Anime", ignoreCase = true)
+        val isManga = media.mediaType.equals("Manga", ignoreCase = true) || media.mediaType.equals("Manhwa", ignoreCase = true)
+        val cleanAniToken = anilistToken.trim().removePrefix("Bearer ").trim()
+
+        // 2. Anime / Manga: Route status changes strictly to AniList
+        if ((isAnime || isManga || media.sourceService == "AniList") && cleanAniToken.isNotBlank()) {
+            var numericId = if (media.sourceService == "AniList") media.id.substringAfterLast("_").toIntOrNull() else null
+            if (numericId == null) {
+                val targetType = if (isAnime) MediaType.ANIME else MediaType.MANGA
+                val aniMatch = searchAniList(
+                    MediaMatchCandidate(rawText = media.cleanTitle, cleanTitle = media.cleanTitle, mediaType = targetType),
+                    if (isAnime) "ANIME" else "MANGA"
+                )
+                numericId = aniMatch?.id?.substringAfterLast("_")?.toIntOrNull()
+            }
             if (numericId != null) {
                 return try {
                     val anilistStatus = when (newStatus.uppercase()) {
@@ -244,14 +261,19 @@ class MediaEnrichmentRepository @Inject constructor(
                         }
                     """.trimIndent()
                     val vars = mapOf("mediaId" to numericId, "status" to anilistStatus)
-                    val resp = aniListApi.executeMutation("Bearer $anilistToken", AniListGraphQLRequest(mutation, vars))
-                    resp.data?.savedEntry != null
+                    val resp = aniListApi.executeMutation("Bearer $cleanAniToken", AniListGraphQLRequest(mutation, vars))
+                    val ok = resp.data?.savedEntry != null
+                    if (!ok && resp.errors != null) {
+                        android.util.Log.e("AniListStatus", "AniList error: ${resp.errors.map { it.message }}")
+                    }
+                    ok
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     android.util.Log.e("Sync", "AniList update status failed", e)
                     false
                 }
             }
-        } else if (media.sourceService == "TMDB" && tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0) {
+        } else if (!isAnime && !isManga && media.sourceService == "TMDB" && tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0) {
             val numericId = media.id.substringAfterLast("_").toIntOrNull()
             if (numericId != null) {
                 val isMovie = media.mediaType.equals("Movie", ignoreCase = true) || media.id.startsWith("tmdb_movie_")
@@ -261,7 +283,7 @@ class MediaEnrichmentRepository @Inject constructor(
                 return updateTmdbWatchlist(key, tmdbSessionId, tmdbAccountId, type, numericId, inWatchlist)
             }
         }
-        return false
+        return true
     }
 
     suspend fun removeFromLibrary(
@@ -740,17 +762,18 @@ class MediaEnrichmentRepository @Inject constructor(
      * every entry into the local Room database.  Returns the count of synced items.
      */
     suspend fun syncAniListLibrary(anilistToken: String): Int {
-        if (anilistToken.isBlank()) return 0
+        val cleanToken = anilistToken.trim().removePrefix("Bearer ").trim()
+        if (cleanToken.isBlank()) return 0
         return try {
             // Step 1: Query Viewer to get the authenticated user's ID
             val viewerGql = "query { Viewer { id name } }"
             val viewerResp = aniListApi.queryUserLibrary(
-                "Bearer $anilistToken",
+                "Bearer $cleanToken",
                 AniListGraphQLRequest(viewerGql, emptyMap())
             )
             val userId = viewerResp.data?.viewer?.id ?: return 0
 
-            // Step 2: Fetch both Anime and Manga collections
+            // Step 2: Fetch both Anime and Manga collections with updatedAt and createdAt
             val listGql = """
                 query (${"$"}userId: Int, ${"$"}type: MediaType) {
                   MediaListCollection(userId: ${"$"}userId, type: ${"$"}type) {
@@ -762,6 +785,8 @@ class MediaEnrichmentRepository @Inject constructor(
                         status
                         score
                         progress
+                        updatedAt
+                        createdAt
                         media {
                           id type format
                           countryOfOrigin
@@ -783,7 +808,7 @@ class MediaEnrichmentRepository @Inject constructor(
             var count = 0
             for (mediaType in listOf("ANIME", "MANGA")) {
                 val resp = aniListApi.queryUserLibrary(
-                    "Bearer $anilistToken",
+                    "Bearer $cleanToken",
                     AniListGraphQLRequest(listGql, mapOf("userId" to userId, "type" to mediaType))
                 )
                 val lists = resp.data?.mediaListCollection?.lists.orEmpty()
@@ -798,8 +823,20 @@ class MediaEnrichmentRepository @Inject constructor(
                             media.format == "MOVIE" -> "Movie"
                             else -> "Anime"
                         }
+                        val entityId = "anilist_${media.type ?: "media"}_${media.id}"
+                        val existing = dao.getById(entityId)
+                        val entryTimestamp = if ((entry.updatedAt ?: 0L) > 0L) (entry.updatedAt!! * 1000L) else System.currentTimeMillis()
+                        val finalCachedAt = existing?.cachedAt ?: entryTimestamp
+
+                        // If user modified status locally in the last 3 minutes, do not let stale cloud cache overwrite it
+                        val finalStatus = if (existing != null && (System.currentTimeMillis() - existing.cachedAt < 180_000L)) {
+                            existing.userStatus
+                        } else {
+                            entry.status ?: groupStatus
+                        }
+
                         val entity = EnrichedMediaEntity(
-                            id = "anilist_${media.type ?: "media"}_${media.id}",
+                            id = entityId,
                             searchKey = displayTitle.trim().lowercase(),
                             cleanTitle = displayTitle,
                             englishTitle = media.title?.english,
@@ -815,7 +852,8 @@ class MediaEnrichmentRepository @Inject constructor(
                             rating = media.averageScore?.let { it / 10.0f },
                             sourceService = "AniList",
                             directWebUrl = media.siteUrl ?: "https://anilist.co/anime/${media.id}",
-                            userStatus = entry.status ?: groupStatus
+                            userStatus = finalStatus,
+                            cachedAt = finalCachedAt
                         )
                         dao.insert(entity)
                         count++
@@ -824,6 +862,7 @@ class MediaEnrichmentRepository @Inject constructor(
             }
             count
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             android.util.Log.e("AniListSync", "Failed to sync AniList library", e)
             0
         }
@@ -845,8 +884,10 @@ class MediaEnrichmentRepository @Inject constructor(
             val moviesResp = tmdbAccountApi.getWatchlistMovies(accountId, apiKey, sessionId)
             for (item in moviesResp.results.orEmpty()) {
                 val year = item.releaseDate?.take(4)?.toIntOrNull()
+                val entityId = "tmdb_movie_${item.id}"
+                val existing = dao.getById(entityId)
                 val entity = EnrichedMediaEntity(
-                    id = "tmdb_movie_${item.id}",
+                    id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
                     cleanTitle = item.displayTitle,
                     englishTitle = item.displayTitle,
@@ -860,19 +901,25 @@ class MediaEnrichmentRepository @Inject constructor(
                     rating = item.voteAverage,
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
-                    userStatus = "PLANNING"
+                    userStatus = existing?.userStatus ?: "PLANNING",
+                    cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 dao.insert(entity)
                 count++
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            android.util.Log.e("TmdbSync", "Failed to sync TMDB watchlist movies", e)
+        }
         try {
             // Fetch watchlist TV shows
             val tvResp = tmdbAccountApi.getWatchlistTv(accountId, apiKey, sessionId)
             for (item in tvResp.results.orEmpty()) {
                 val year = item.firstAirDate?.take(4)?.toIntOrNull()
+                val entityId = "tmdb_tv_${item.id}"
+                val existing = dao.getById(entityId)
                 val entity = EnrichedMediaEntity(
-                    id = "tmdb_tv_${item.id}",
+                    id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
                     cleanTitle = item.displayTitle,
                     englishTitle = item.displayTitle,
@@ -886,19 +933,25 @@ class MediaEnrichmentRepository @Inject constructor(
                     rating = item.voteAverage,
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
-                    userStatus = "PLANNING"
+                    userStatus = existing?.userStatus ?: "PLANNING",
+                    cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 dao.insert(entity)
                 count++
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            android.util.Log.e("TmdbSync", "Failed to sync TMDB watchlist TV", e)
+        }
         try {
             // Fetch favorite movies
             val favMovies = tmdbAccountApi.getFavoriteMovies(accountId, apiKey, sessionId)
             for (item in favMovies.results.orEmpty()) {
                 val year = item.releaseDate?.take(4)?.toIntOrNull()
+                val entityId = "tmdb_movie_${item.id}"
+                val existing = dao.getById(entityId)
                 val entity = EnrichedMediaEntity(
-                    id = "tmdb_movie_${item.id}",
+                    id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
                     cleanTitle = item.displayTitle,
                     englishTitle = item.displayTitle,
@@ -912,19 +965,25 @@ class MediaEnrichmentRepository @Inject constructor(
                     rating = item.voteAverage,
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
-                    userStatus = "COMPLETED"
+                    userStatus = existing?.userStatus ?: "COMPLETED",
+                    cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 dao.insert(entity)
                 count++
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            android.util.Log.e("TmdbSync", "Failed to sync TMDB favorite movies", e)
+        }
         try {
             // Fetch favorite TV shows
             val favTv = tmdbAccountApi.getFavoriteTv(accountId, apiKey, sessionId)
             for (item in favTv.results.orEmpty()) {
                 val year = item.firstAirDate?.take(4)?.toIntOrNull()
+                val entityId = "tmdb_tv_${item.id}"
+                val existing = dao.getById(entityId)
                 val entity = EnrichedMediaEntity(
-                    id = "tmdb_tv_${item.id}",
+                    id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
                     cleanTitle = item.displayTitle,
                     englishTitle = item.displayTitle,
@@ -938,12 +997,16 @@ class MediaEnrichmentRepository @Inject constructor(
                     rating = item.voteAverage,
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
-                    userStatus = "COMPLETED"
+                    userStatus = existing?.userStatus ?: "COMPLETED",
+                    cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 dao.insert(entity)
                 count++
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            android.util.Log.e("TmdbSync", "Failed to sync TMDB favorite TV", e)
+        }
         return count
     }
 

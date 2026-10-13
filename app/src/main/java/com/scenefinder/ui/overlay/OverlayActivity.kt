@@ -21,7 +21,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.OpenInNew
@@ -115,6 +119,7 @@ class OverlayActivity : ComponentActivity() {
                 val tmdbAccountId by settings.tmdbAccountId.collectAsState()
 
                 var isSaved by remember { mutableStateOf(false) }
+                var showStatusDialog by remember { mutableStateOf(false) }
 
                 LaunchedEffect(media.id) {
                     withContext(Dispatchers.IO) {
@@ -147,8 +152,8 @@ class OverlayActivity : ComponentActivity() {
                             media = media,
                             isSaved = isSaved,
                             onToggleWatchlist = {
-                                scope.launch {
-                                    if (isSaved) {
+                                if (isSaved) {
+                                    scope.launch {
                                         withContext(Dispatchers.IO) {
                                             repository.removeFromLibrary(
                                                 media = media,
@@ -160,30 +165,9 @@ class OverlayActivity : ComponentActivity() {
                                         }
                                         isSaved = false
                                         Toast.makeText(this@OverlayActivity, "Removed from Watchlist", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val synced = withContext(Dispatchers.IO) {
-                                            repository.saveToLibrary(
-                                                media = media,
-                                                anilistToken = anilistToken,
-                                                tmdbApiKey = apiKey,
-                                                tmdbSessionId = tmdbSessionId,
-                                                tmdbAccountId = tmdbAccountId
-                                            )
-                                        }
-                                        isSaved = true
-                                        val syncTarget = when {
-                                            synced && media.sourceService == "AniList" -> "AniList"
-                                            synced && media.sourceService == "TMDB" -> "TMDB"
-                                            synced -> "Cloud"
-                                            else -> null
-                                        }
-                                        val msg = if (syncTarget != null) {
-                                            "Added & synced to $syncTarget!"
-                                        } else {
-                                            "Added to Watchlist"
-                                        }
-                                        Toast.makeText(this@OverlayActivity, msg, Toast.LENGTH_SHORT).show()
                                     }
+                                } else {
+                                    showStatusDialog = true
                                 }
                             },
                             onOpenWeb = {
@@ -197,6 +181,104 @@ class OverlayActivity : ComponentActivity() {
                             },
                             onDismiss = { finish() }
                         )
+
+                        if (showStatusDialog) {
+                            Dialog(onDismissRequest = { showStatusDialog = false }) {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = DarkSurface,
+                                    tonalElevation = 6.dp,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "Add to Watchlist",
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = media.cleanTitle,
+                                            fontSize = 13.sp,
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(Modifier.height(16.dp))
+
+                                        listOf(
+                                            Triple("CURRENT", "Watching", "Currently watching / reading"),
+                                            Triple("PLANNING", "Plan to Watch", "Save to watch later"),
+                                            Triple("COMPLETED", "Completed", "Finished watching"),
+                                            Triple("DROPPED", "Dropped", "Stopped watching")
+                                        ).forEach { (code, title, desc) ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(Color.Black.copy(alpha = 0.5f))
+                                                    .clickable {
+                                                        showStatusDialog = false
+                                                        scope.launch {
+                                                            val toSave = media.copy(userStatus = code, cachedAt = System.currentTimeMillis())
+                                                            val synced = withContext(Dispatchers.IO) {
+                                                                repository.saveToLibrary(
+                                                                    media = toSave,
+                                                                    anilistToken = anilistToken,
+                                                                    tmdbApiKey = apiKey,
+                                                                    tmdbSessionId = tmdbSessionId,
+                                                                    tmdbAccountId = tmdbAccountId
+                                                                )
+                                                            }
+                                                            isSaved = true
+                                                            val statusLabel = when (code) {
+                                                                "CURRENT" -> "Watching"
+                                                                "COMPLETED" -> "Completed"
+                                                                "DROPPED" -> "Dropped"
+                                                                else -> "Plan to Watch"
+                                                            }
+                                                            val isAnime = toSave.mediaType.equals("Anime", ignoreCase = true) || toSave.mediaType.equals("Manga", ignoreCase = true)
+                                                            val target = if (isAnime) "AniList" else "TMDB"
+                                                            val msg = if (synced) "Saved as $statusLabel & synced to $target!" else "Saved as $statusLabel"
+                                                            Toast.makeText(this@OverlayActivity, msg, Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                val dotColor = when (code) {
+                                                    "CURRENT" -> NeonGreen
+                                                    "PLANNING" -> NeonAccent
+                                                    "COMPLETED" -> Color(0xFF9C27B0)
+                                                    else -> NeonOrange
+                                                }
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(10.dp)
+                                                        .clip(CircleShape)
+                                                        .background(dotColor)
+                                                )
+                                                Spacer(Modifier.width(12.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                                    Text(desc, fontSize = 11.sp, color = TextSecondary)
+                                                }
+                                            }
+                                            Spacer(Modifier.height(8.dp))
+                                        }
+
+                                        Spacer(Modifier.height(4.dp))
+                                        TextButton(onClick = { showStatusDialog = false }, modifier = Modifier.fillMaxWidth()) {
+                                            Text("Cancel", color = TextSecondary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

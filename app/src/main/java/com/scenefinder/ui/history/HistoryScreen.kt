@@ -52,7 +52,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -68,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -137,11 +140,14 @@ fun HistoryScreen(
     startInSearch: Boolean = false,
     onBackToHome: () -> Unit = {}
 ) {
-    val historyList by dao.getRecentHistory().collectAsState(initial = emptyList())
+    val historyList by dao.getAllHistory().collectAsState(initial = emptyList())
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
+
+    var itemToSaveWithStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
+    var visibleRowsCount by remember { mutableStateOf(10) }
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchingOnline by remember { mutableStateOf(false) }
@@ -177,6 +183,21 @@ fun HistoryScreen(
     val anilistToken by settings.anilistToken.collectAsState()
     var isCloudSyncing by remember { mutableStateOf(false) }
     val savedIds = remember(historyList) { historyList.map { it.id }.toHashSet() }
+
+    // Silent auto-sync on opening screen so changes from website are fetched automatically
+    LaunchedEffect(Unit) {
+        if (anilistToken.isNotBlank() || (tmdbSessionId.isNotBlank() && tmdbAccountId > 0)) {
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+                if (anilistToken.isNotBlank()) {
+                    try { repository.syncAniListLibrary(anilistToken) } catch (_: Exception) {}
+                }
+                if (tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0) {
+                    val effectiveKey = apiKey.ifBlank { MediaEnrichmentRepository.DEFAULT_TMDB_API_KEY }
+                    try { repository.syncTmdbLibrary(effectiveKey, tmdbSessionId, tmdbAccountId) } catch (_: Exception) {}
+                }
+            }
+        }
+    }
 
     fun triggerCloudSync() {
         if (anilistToken.isBlank() && (tmdbSessionId.isBlank() || tmdbSessionId.startsWith("__pending__:"))) {
@@ -497,8 +518,8 @@ fun HistoryScreen(
                         media = result,
                         isSaved = isAlreadySaved,
                         onAdd = {
-                            scope.launch(Dispatchers.IO) {
-                                if (isAlreadySaved) {
+                            if (isAlreadySaved) {
+                                scope.launch(Dispatchers.IO) {
                                     repository.removeFromLibrary(
                                         media = result,
                                         anilistToken = anilistToken,
@@ -509,29 +530,10 @@ fun HistoryScreen(
                                     launch(Dispatchers.Main) {
                                         Toast.makeText(context, "Removed from Watchlist", Toast.LENGTH_SHORT).show()
                                     }
-                                } else {
-                                    val synced = repository.saveToLibrary(
-                                        media = result,
-                                        anilistToken = anilistToken,
-                                        tmdbApiKey = apiKey,
-                                        tmdbSessionId = tmdbSessionId,
-                                        tmdbAccountId = tmdbAccountId
-                                    )
-                                    launch(Dispatchers.Main) {
-                                        val syncTarget = when {
-                                            synced && result.sourceService == "AniList" -> "AniList"
-                                            synced && result.sourceService == "TMDB" -> "TMDB"
-                                            synced -> "Cloud"
-                                            else -> null
-                                        }
-                                        val msg = if (syncTarget != null) {
-                                            "Added & synced to $syncTarget!"
-                                        } else {
-                                            "Added \"${result.cleanTitle}\" to Watchlist"
-                                        }
-                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                    }
                                 }
+                            } else {
+                                // Prompt user to select completed / plan to watch / dropped / watching
+                                itemToSaveWithStatus = result
                             }
                         },
                         onOpen = {
@@ -571,7 +573,10 @@ fun HistoryScreen(
             if (filteredLibrary.isEmpty()) {
                 item { IGEmptyState(selectedStatusFilter) }
             } else {
-                items(libraryPairs, key = { pair -> pair.joinToString("_") { it.id } }) { pair ->
+                val allLibraryPairs = filteredLibrary.chunked(3)
+                val displayedLibraryPairs = allLibraryPairs.take(visibleRowsCount)
+
+                items(displayedLibraryPairs, key = { pair -> pair.joinToString("_") { it.id } }) { pair ->
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         pair.forEach { media ->
                             IGPosterCard(
@@ -610,9 +615,142 @@ fun HistoryScreen(
                                 }
                             )
                         }
-                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        if (pair.size == 1) Spacer(Modifier.weight(2f))
+                        else if (pair.size == 2) Spacer(Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(3.dp))
+                }
+
+                // Instagram feed style progressive infinite loading
+                if (displayedLibraryPairs.size < allLibraryPairs.size) {
+                    item {
+                        LaunchedEffect(displayedLibraryPairs.size) {
+                            visibleRowsCount = (visibleRowsCount + 8).coerceAtMost(allLibraryPairs.size)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = IGGradMid,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Dialog asking for status when saving an item from search
+    itemToSaveWithStatus?.let { item ->
+        StatusSelectionDialog(
+            media = item,
+            onDismiss = { itemToSaveWithStatus = null },
+            onStatusSelected = { chosenStatus ->
+                scope.launch(Dispatchers.IO) {
+                    val toSave = item.copy(userStatus = chosenStatus, cachedAt = System.currentTimeMillis())
+                    val synced = repository.saveToLibrary(
+                        media = toSave,
+                        anilistToken = anilistToken,
+                        tmdbApiKey = apiKey,
+                        tmdbSessionId = tmdbSessionId,
+                        tmdbAccountId = tmdbAccountId
+                    )
+                    launch(Dispatchers.Main) {
+                        val statusLabel = when (chosenStatus) {
+                            "CURRENT" -> "Watching"
+                            "COMPLETED" -> "Completed"
+                            "DROPPED" -> "Dropped"
+                            else -> "Plan to Watch"
+                        }
+                        val isAnime = toSave.mediaType.equals("Anime", ignoreCase = true) || toSave.mediaType.equals("Manga", ignoreCase = true)
+                        val target = if (isAnime) "AniList" else "TMDB"
+                        val msg = if (synced) "Added as $statusLabel & synced to $target!" else "Added \"${toSave.cleanTitle}\" as $statusLabel"
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+                itemToSaveWithStatus = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun StatusSelectionDialog(
+    media: EnrichedMediaEntity,
+    onDismiss: () -> Unit,
+    onStatusSelected: (String) -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = IGCard,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Add to Watchlist",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = IGTextPrimary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = media.cleanTitle,
+                    fontSize = 13.sp,
+                    color = IGTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(16.dp))
+
+                listOf(
+                    Triple("CURRENT", "Watching", "Currently watching / reading"),
+                    Triple("PLANNING", "Plan to Watch", "Save to watch later"),
+                    Triple("COMPLETED", "Completed", "Finished watching"),
+                    Triple("DROPPED", "Dropped", "Stopped watching")
+                ).forEach { (code, title, desc) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(IGBlack.copy(alpha = 0.5f))
+                            .clickable { onStatusSelected(code) }
+                            .padding(horizontal = 14.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val dotColor = when (code) {
+                            "CURRENT" -> Color(0xFF4CAF50)
+                            "PLANNING" -> Color(0xFF2196F3)
+                            "COMPLETED" -> Color(0xFF9C27B0)
+                            else -> Color(0xFFE91E63)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = IGTextPrimary)
+                            Text(desc, fontSize = 11.sp, color = IGTextSecondary)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                    Text("Cancel", color = IGTextSecondary)
                 }
             }
         }

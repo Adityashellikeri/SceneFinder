@@ -20,11 +20,14 @@ interface EnrichedMediaDao {
     @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC")
     fun getAllHistoryPaged(): PagingSource<Int, EnrichedMediaEntity>
 
-    @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC LIMIT 100")
+    @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC")
+    fun getAllHistory(): Flow<List<EnrichedMediaEntity>>
+
+    @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC")
     fun getRecentHistory(): Flow<List<EnrichedMediaEntity>>
 
-    @Query("UPDATE enriched_media SET userStatus = :status WHERE id = :id")
-    suspend fun updateStatus(id: String, status: String)
+    @Query("UPDATE enriched_media SET userStatus = :status, cachedAt = :cachedAt WHERE id = :id")
+    suspend fun updateStatus(id: String, status: String, cachedAt: Long = System.currentTimeMillis())
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: EnrichedMediaEntity)

@@ -59,7 +59,14 @@ data class AniListGraphQLRequest(
 
 @JsonClass(generateAdapter = true)
 data class AniListGraphQLResponse(
-    val data: AniListData?
+    val data: AniListData?,
+    val errors: List<AniListGraphQLError>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class AniListGraphQLError(
+    val message: String?,
+    val status: Int? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -151,5 +158,7 @@ data class AniListMediaListEntry(
     val status: String?,
     val score: Float?,
     val progress: Int?,
+    val updatedAt: Long? = null,
+    val createdAt: Long? = null,
     val media: AniListMediaItem?
 )

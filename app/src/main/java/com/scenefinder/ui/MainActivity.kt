@@ -154,17 +154,23 @@ class MainActivity : ComponentActivity() {
         }
 
         // Silent background sync of libraries so website changes reflect in the app
-        val anilistTok = settings.anilistToken.value
+        val anilistTok = settings.anilistToken.value.trim().removePrefix("Bearer ").trim()
         val tmdbSess = settings.tmdbSessionId.value
         val tmdbAcc = settings.tmdbAccountId.value
-        if (anilistTok.isNotBlank()) {
-            kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
-                repository.syncAniListLibrary(anilistTok)
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+            if (anilistTok.isNotBlank()) {
+                try {
+                    repository.syncAniListLibrary(anilistTok)
+                } catch (e: Exception) {
+                    android.util.Log.e("AutoSync", "AniList auto-sync error", e)
+                }
             }
-        }
-        if (tmdbSess.isNotBlank() && !tmdbSess.startsWith("__pending__:") && tmdbAcc > 0) {
-            kotlinx.coroutines.MainScope().launch(Dispatchers.IO) {
-                repository.syncTmdbLibrary(key, tmdbSess, tmdbAcc)
+            if (tmdbSess.isNotBlank() && !tmdbSess.startsWith("__pending__:") && tmdbAcc > 0) {
+                try {
+                    repository.syncTmdbLibrary(key, tmdbSess, tmdbAcc)
+                } catch (e: Exception) {
+                    android.util.Log.e("AutoSync", "TMDB auto-sync error", e)
+                }
             }
         }
     }
