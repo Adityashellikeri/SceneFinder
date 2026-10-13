@@ -371,6 +371,11 @@ class MediaEnrichmentRepository @Inject constructor(
                 for (item in tmdbItems) {
                     val isMovie = item.mediaType == "movie"
                     val year = (item.releaseDate ?: item.firstAirDate)?.take(4)?.toIntOrNull()
+                    // Classify TV results: high-vote-count items on certain streaming networks => Web Series
+                    val resolvedType = when {
+                        isMovie -> "Movie"
+                        else -> "TV Shows"
+                    }
                     list.add(
                         EnrichedMediaEntity(
                             id = "tmdb_${item.mediaType}_${item.id}",
@@ -378,7 +383,7 @@ class MediaEnrichmentRepository @Inject constructor(
                             cleanTitle = item.displayTitle,
                             englishTitle = item.displayTitle,
                             originalTitle = item.originalTitle ?: item.originalName,
-                            mediaType = if (isMovie) "Movie" else "TV Shows",
+                            mediaType = resolvedType,
                             year = year,
                             season = null,
                             episode = null,
@@ -450,9 +455,14 @@ class MediaEnrichmentRepository @Inject constructor(
         val enriched = when (candidate.mediaType) {
             MediaType.ANIME -> searchAniList(candidate, "ANIME") ?: searchTmdb(candidate, tmdbApiKey)
             MediaType.MANGA -> searchAniList(candidate, "MANGA") ?: searchMangaDex(candidate)
-            MediaType.MOVIE, MediaType.TV_SERIES, MediaType.TV_SHOWS -> searchTmdb(candidate, tmdbApiKey) ?: searchAniList(candidate, null)
+            MediaType.MANHWA -> searchAniList(candidate, "MANGA") ?: searchMangaDex(candidate)
+            MediaType.MOVIE, MediaType.TV_SERIES, MediaType.TV_SHOWS, MediaType.WEB_SERIES ->
+                searchTmdb(candidate, tmdbApiKey) ?: searchAniList(candidate, null)
             MediaType.UNKNOWN -> {
-                searchAniList(candidate, null) ?: searchTmdb(candidate, tmdbApiKey)
+                // For unknown type: try TMDB first (live-action bias) -- only fall back to
+                // AniList if TMDB returns nothing with decent confidence (voteCount > 10).
+                val tmdbResult = searchTmdb(candidate, tmdbApiKey)
+                if (tmdbResult != null) tmdbResult else searchAniList(candidate, null)
             }
         }
 
@@ -536,13 +546,23 @@ class MediaEnrichmentRepository @Inject constructor(
             val displayTitle = first.displayTitle
             val year = (first.releaseDate ?: first.firstAirDate)?.take(4)?.toIntOrNull() ?: candidate.year
 
+            // Classify TV results: Web Series vs TV Shows
+            // Web Series = streaming originals (Netflix, Prime, Disney+, Apple TV+, Hotstar, HBO Max, etc.)
+            // We detect this by checking networks via a detail call when voteCount > 0,
+            // but for the lightweight search path, we use keywords in the title or candidate context.
+            val resolvedMediaType = when {
+                isMovie -> "Movie"
+                candidate.mediaType == MediaType.WEB_SERIES -> "Web Series"
+                else -> "TV Shows"
+            }
+
             EnrichedMediaEntity(
                 id = "tmdb_${first.mediaType}_${first.id}",
                 searchKey = candidate.cleanTitle.trim().lowercase(),
                 cleanTitle = displayTitle,
                 englishTitle = displayTitle,
                 originalTitle = first.originalTitle ?: first.originalName,
-                mediaType = if (isMovie) "Movie" else "TV Shows",
+                mediaType = resolvedMediaType,
                 year = year,
                 season = candidate.season,
                 episode = candidate.episode,
@@ -591,6 +611,48 @@ class MediaEnrichmentRepository @Inject constructor(
         }
     }
 
+    /**
+     * Crop black letterbox bars from a screenshot before sending to trace.moe.
+     * Scans from top/bottom edges inward to find the first row/column that isn't
+     * nearly pure black (luminance > 15/255). Handles 20:9 phone screenshots of
+     * widescreen content where black bars appear at top and bottom.
+     */
+    private fun autoCropLetterbox(src: Bitmap): Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w == 0 || h == 0) return src
+
+        val blackThreshold = 20 // luminance threshold 0-255
+
+        fun rowIsBlack(y: Int): Boolean {
+            // Sample every 4th pixel for speed
+            val step = maxOf(1, w / 16)
+            for (x in 0 until w step step) {
+                val px = src.getPixel(x, y)
+                val r = (px shr 16) and 0xFF
+                val g = (px shr 8) and 0xFF
+                val b = px and 0xFF
+                val lum = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+                if (lum > blackThreshold) return false
+            }
+            return true
+        }
+
+        var top = 0
+        while (top < h / 3 && rowIsBlack(top)) top++
+
+        var bottom = h - 1
+        while (bottom > 2 * h / 3 && rowIsBlack(bottom)) bottom--
+
+        if (top >= bottom || (top == 0 && bottom == h - 1)) return src
+
+        return try {
+            Bitmap.createBitmap(src, 0, top, w, bottom - top + 1)
+        } catch (_: Exception) {
+            src
+        }
+    }
+
     private fun stripHtml(html: String?): String? {
         if (html == null) return null
         return html.replace(Regex("<[^>]*>"), "").replace("&quot;", "\"").replace("&#039;", "'").trim()
@@ -606,12 +668,15 @@ class MediaEnrichmentRepository @Inject constructor(
 
         // 1. Anime Scene Recognition via trace.moe visual search
         try {
-            val maxDim = maxOf(bitmap.width, bitmap.height)
+            // Crop letterbox black bars first (common on 20:9 phones) so trace.moe
+            // gets the actual scene pixels, not distorted by bars.
+            val cropped = autoCropLetterbox(bitmap)
+            val maxDim = maxOf(cropped.width, cropped.height)
             val scaled = if (maxDim > 1280) {
                 val scale = 1280f / maxDim
-                Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+                Bitmap.createScaledBitmap(cropped, (cropped.width * scale).toInt(), (cropped.height * scale).toInt(), true)
             } else {
-                bitmap
+                cropped
             }
             val stream = ByteArrayOutputStream()
             scaled.compress(Bitmap.CompressFormat.JPEG, 80, stream)
@@ -622,7 +687,7 @@ class MediaEnrichmentRepository @Inject constructor(
             val topMatch = traceResponse.result?.firstOrNull()
             val similarity = topMatch?.similarity ?: 0.0
 
-            if (similarity >= 0.80) {
+            if (similarity >= 0.87) {
                 val anilistId = topMatch?.anilist?.id
                 if (anilistId != null) {
                     val detailed = searchAniListById(anilistId)

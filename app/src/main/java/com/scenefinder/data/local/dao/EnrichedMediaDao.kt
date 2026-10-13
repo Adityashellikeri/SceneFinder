@@ -1,4 +1,4 @@
-package com.scenefinder.data.local.dao
+﻿package com.scenefinder.data.local.dao
 
 import androidx.paging.PagingSource
 import androidx.room.Dao
@@ -20,10 +20,11 @@ interface EnrichedMediaDao {
     @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC")
     fun getAllHistoryPaged(): PagingSource<Int, EnrichedMediaEntity>
 
+    // Paginated for UI -- returns all sorted by newest first (Instagram-feed style)
     @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC")
     fun getAllHistory(): Flow<List<EnrichedMediaEntity>>
 
-    @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC")
+    @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC LIMIT 50")
     fun getRecentHistory(): Flow<List<EnrichedMediaEntity>>
 
     @Query("UPDATE enriched_media SET userStatus = :status, cachedAt = :cachedAt WHERE id = :id")

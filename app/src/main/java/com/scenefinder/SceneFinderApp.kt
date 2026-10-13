@@ -22,6 +22,7 @@ class SceneFinderApp : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
+            .dispatcher(kotlinx.coroutines.Dispatchers.IO.limitedParallelism(3))
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.35)

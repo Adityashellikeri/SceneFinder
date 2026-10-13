@@ -156,6 +156,7 @@ fun HistoryScreen(
 
     var itemToSaveWithStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
+    val onCardClick = remember { { item: EnrichedMediaEntity -> selectedMediaForDetail = item } }
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchingOnline by remember { mutableStateOf(false) }
@@ -649,7 +650,7 @@ fun HistoryScreen(
                     IGPosterCard(
                         media = media,
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = { selectedMediaForDetail = media }
+                        onClick = onCardClick
                     )
                 }
 
@@ -927,7 +928,7 @@ private fun IGTopBar(
 @Composable
 private fun IGPosterCard(
     media: EnrichedMediaEntity,
-    onClick: () -> Unit,
+    onClick: (EnrichedMediaEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -946,7 +947,7 @@ private fun IGPosterCard(
             .aspectRatio(0.67f)
             .clip(RoundedCornerShape(3.dp))
             .background(IGSurface)
-            .clickable(onClick = onClick)
+            .clickable { onClick(media) }
     ) {
         if (!media.posterUrl.isNullOrBlank()) {
             AsyncImage(
@@ -970,7 +971,8 @@ private fun IGPosterCard(
                 .padding(horizontal = 6.dp, vertical = 6.dp)
         ) {
             Column {
-                val typeColor = getMediaTypeColor(media.mediaType)
+                val typeColor = remember(media.mediaType) { getMediaTypeColor(media.mediaType) }
+                val ratingStr = remember(media.rating) { media.rating?.let { "%.1f".format(it) } }
                 Text(
                     media.mediaType.uppercase(),
                     fontSize = 9.sp,
@@ -986,22 +988,23 @@ private fun IGPosterCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                media.rating?.let {
+                if (ratingStr != null) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(9.dp))
-                        Text(" ${String.format("%.1f", it)}", fontSize = 9.sp, color = IGYellow)
+                        Text(" $ratingStr", fontSize = 9.sp, color = IGYellow)
                     }
                 }
             }
         }
 
         // Status indicator dot at top-right
+        val statusColor = remember(media.userStatus) { getStatusColor(media.userStatus) }
         Box(
             modifier = Modifier
                 .padding(6.dp)
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(getStatusColor(media.userStatus))
+                .background(statusColor)
                 .align(Alignment.TopEnd)
         )
     }
