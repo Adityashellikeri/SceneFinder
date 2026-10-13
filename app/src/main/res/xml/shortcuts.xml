@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="arm_session"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_search"
+        android:shortcutShortLabel="@string/shortcut_arm_label"
+        android:shortcutLongLabel="@string/shortcut_arm_label">
+        <intent
+            android:action="com.scenefinder.ACTION_ARM"
+            android:targetPackage="com.scenefinder"
+            android:targetClass="com.scenefinder.ui.MainActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

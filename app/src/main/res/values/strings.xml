@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">SceneFinder</string>
+    <string name="accessibility_service_label">SceneFinder Screen Reader</string>
+    <string name="accessibility_service_description">Reads text nodes from Google Circle to Search results only when armed by shortcut.</string>
+    <string name="tile_label">SceneFinder</string>
+    <string name="shortcut_arm_label">Arm SceneFinder</string>
+    <string name="notif_channel_session">Session Status</string>
+    <string name="notif_listening_title">SceneFinder is Listening</string>
+    <string name="notif_listening_text">Waiting for Circle to Search results&#8230;</string>
+    <string name="notif_action_cancel">Cancel</string>
+    <string name="onboarding_title">SceneFinder</string>
+    <string name="onboarding_privacy">Privacy: This app reads Google search results ONLY while you actively arm a session. Raw text is never stored beyond the current search. Only the final matched title is sent to TMDB/AniList/MangaDex.</string>
+    <string name="perm_overlay">Draw over other apps (for result card)</string>
+    <string name="perm_notifications">Notifications (for Listening indicator)</string>
+    <string name="perm_accessibility">Accessibility Service (to read search results)</string>
+</resources>
