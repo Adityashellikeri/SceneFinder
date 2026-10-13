@@ -84,6 +84,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -1251,10 +1252,10 @@ private fun StatusSelectionDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val dotColor = when (code) {
-                            "CURRENT" -> Color(0xFF4CAF50)
-                            "PLANNING" -> Color(0xFF2196F3)
-                            "COMPLETED" -> Color(0xFF9C27B0)
-                            else -> Color(0xFFE91E63)
+                            "CURRENT" -> Color(0xFF0095F6)
+                            "PLANNING" -> Color(0xFFA855F7)
+                            "COMPLETED" -> Color(0xFF10B981)
+                            else -> Color(0xFFEF4444)
                         }
                         Box(
                             modifier = Modifier
@@ -1482,21 +1483,6 @@ private fun IGTopBar(
                                 onNavigateToSettings()
                             }
                         )
-                        if (showClearAll) {
-                            DropdownMenuItem(
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(10.dp))
-                                        Text("Clear History", color = Color(0xFFEF4444), fontSize = 13.5.sp)
-                                    }
-                                },
-                                onClick = {
-                                    showOptionsMenu = false
-                                    onClearAll()
-                                }
-                            )
-                        }
                     }
                 }
 
@@ -1553,20 +1539,17 @@ private fun IGPosterCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Tactile press & selection scale animation
+    // Fast, lightweight tactile press & selection scale animation
+    val targetScale = if (isPressed) 0.94f else if (isSelected) 0.95f else 1.0f
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else if (isSelected) 0.95f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        targetValue = targetScale,
+        animationSpec = tween(120),
         label = "poster_scale"
     )
 
-    // Revert to clean, normal border (highlight only when selected in multi-select mode)
-    val targetBorderColor = if (isSelected) IGGradMid else Color(0x22FFFFFF)
-    val targetBorderWidth = if (isSelected) 2.5.dp else 0.5.dp
-    val borderColor by animateColorAsState(targetBorderColor, tween(200), label = "border_color")
+    // Border: static when unselected to avoid allocating animation state per card
+    val borderWidth = if (isSelected) 2.5.dp else 0.5.dp
+    val borderColor = if (isSelected) IGGradMid else Color(0x22FFFFFF)
 
     val imageRequest = remember(media.posterUrl) {
         ImageRequest.Builder(context)
@@ -1581,11 +1564,14 @@ private fun IGPosterCard(
 
     Box(
         modifier = modifier
-            .scale(scale)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .aspectRatio(0.67f)
             .clip(RoundedCornerShape(6.dp))
             .background(IGSurface)
-            .border(targetBorderWidth, borderColor, RoundedCornerShape(6.dp))
+            .border(borderWidth, borderColor, RoundedCornerShape(6.dp))
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1615,63 +1601,78 @@ private fun IGPosterCard(
             }
         }
 
-        // Bottom gradient overlay with title, type, rating and status tag
+        // Bottom gradient overlay with title, type, and rating
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .background(posterGradientOverlay)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.75f),
+                            Color.Black.copy(alpha = 0.96f)
+                        )
+                    )
+                )
                 .padding(horizontal = 6.dp, vertical = 6.dp)
         ) {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 val typeColor = remember(media.mediaType) { getMediaTypeColor(media.mediaType) }
                 val ratingStr = remember(media.rating) { media.rating?.let { "%.1f".format(it) } }
-                val statusTag = remember(media.userStatus) {
-                    when (media.userStatus) {
-                        "CURRENT" -> "WATCHING" to Color(0xFF0095F6)
-                        "PLANNING" -> "PLAN" to Color(0xFFA855F7)
-                        "COMPLETED" -> "COMPLETED" to Color(0xFF10B981)
-                        "DROPPED" -> "DROPPED" to Color(0xFFEF4444)
-                        else -> null
-                    }
-                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        media.mediaType.uppercase(),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = typeColor,
-                        letterSpacing = 0.5.sp
-                    )
-                    if (statusTag != null) {
+                    // Category pill badge with clear high-contrast backing
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(typeColor.copy(alpha = 0.22f))
+                            .border(0.5.dp, typeColor.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                    ) {
                         Text(
-                            text = "● ${statusTag.first}",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = statusTag.second,
-                            letterSpacing = 0.3.sp
+                            text = media.mediaType.uppercase(),
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = typeColor,
+                            letterSpacing = 0.4.sp
                         )
+                    }
+
+                    if (ratingStr != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(9.dp))
+                            Text(" $ratingStr", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = IGYellow)
+                        }
                     }
                 }
 
-                Text(
-                    media.cleanTitle,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = IGTextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (ratingStr != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(9.dp))
-                        Text(" $ratingStr", fontSize = 9.sp, color = IGYellow)
-                    }
+                // Show title with dark frosted background for 100% legibility
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .padding(horizontal = 3.dp, vertical = 1.5.dp)
+                ) {
+                    Text(
+                        text = media.cleanTitle,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -1869,10 +1870,10 @@ private fun MediaDetailDialog(
 
                 // Convenient status selector rows
                 val statusOptions = listOf(
-                    Triple("CURRENT", "Watching", Color(0xFF4CAF50)),
-                    Triple("PLANNING", "Plan to Watch", Color(0xFF2196F3)),
-                    Triple("COMPLETED", "Completed", Color(0xFF9C27B0)),
-                    Triple("DROPPED", "Dropped", Color(0xFFE91E63))
+                    Triple("CURRENT", "Watching", Color(0xFF0095F6)),
+                    Triple("PLANNING", "Plan to Watch", Color(0xFFA855F7)),
+                    Triple("COMPLETED", "Completed", Color(0xFF10B981)),
+                    Triple("DROPPED", "Dropped", Color(0xFFEF4444))
                 )
 
                 Column(

@@ -251,10 +251,10 @@ class OverlayActivity : ComponentActivity() {
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 val dotColor = when (code) {
-                                                    "CURRENT" -> NeonGreen
-                                                    "PLANNING" -> NeonAccent
-                                                    "COMPLETED" -> Color(0xFF9C27B0)
-                                                    else -> NeonOrange
+                                                    "CURRENT" -> Color(0xFF0095F6)
+                                                    "PLANNING" -> Color(0xFFA855F7)
+                                                    "COMPLETED" -> Color(0xFF10B981)
+                                                    else -> Color(0xFFEF4444)
                                                 }
                                                 Box(
                                                     modifier = Modifier
@@ -427,7 +427,7 @@ fun OverlayMediaCard(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = if (isSaved) "In Watchlist" else "+ Watchlist",
+                        text = if (isSaved) "In Library" else "+ Add to Library",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )

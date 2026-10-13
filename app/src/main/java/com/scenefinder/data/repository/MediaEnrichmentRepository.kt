@@ -45,6 +45,10 @@ class MediaEnrichmentRepository @Inject constructor(
 
     fun getAllHistoryPaged(): PagingSource<Int, EnrichedMediaEntity> = dao.getAllHistoryPaged()
 
+    suspend fun clearAllHistory() {
+        dao.clearAll()
+    }
+
     /** Exchange an AniList OAuth authorisation code for an access token. */
     suspend fun exchangeAniListCode(
         code: String,
@@ -466,10 +470,6 @@ class MediaEnrichmentRepository @Inject constructor(
             }
         }
 
-        if (enriched != null) {
-            dao.insert(enriched)
-        }
-
         return enriched
     }
 
@@ -540,8 +540,13 @@ class MediaEnrichmentRepository @Inject constructor(
     private suspend fun searchTmdb(candidate: MediaMatchCandidate, apiKey: String): EnrichedMediaEntity? {
         val effectiveKey = apiKey.ifBlank { DEFAULT_TMDB_API_KEY }
         return try {
+            if (candidate.cleanTitle.lowercase().contains("google")) return null
             val response = tmdbApi.searchMulti(candidate.cleanTitle, effectiveKey)
-            val first = response.results?.firstOrNull { it.mediaType == "movie" || it.mediaType == "tv" } ?: return null
+            val first = response.results?.firstOrNull { 
+                (it.mediaType == "movie" || it.mediaType == "tv") &&
+                !it.displayTitle.lowercase().contains("google") &&
+                !com.scenefinder.domain.parser.HeuristicCleaner.isJunkText(it.displayTitle)
+            } ?: return null
             val isMovie = first.mediaType == "movie"
             val displayTitle = first.displayTitle
             val year = (first.releaseDate ?: first.firstAirDate)?.take(4)?.toIntOrNull() ?: candidate.year
@@ -702,7 +707,6 @@ class MediaEnrichmentRepository @Inject constructor(
                                 detailed.overview
                             }
                         )
-                        dao.insert(entity)
                         return entity
                     }
                 }
@@ -730,7 +734,6 @@ class MediaEnrichmentRepository @Inject constructor(
                     directWebUrl = "https://anilist.co/anime/${topMatch?.anilist?.id}",
                     userStatus = "PLANNING"
                 )
-                dao.insert(entity)
                 return entity
             }
         } catch (_: Exception) {
@@ -753,7 +756,6 @@ class MediaEnrichmentRepository @Inject constructor(
                 val searchResults = searchAllMedia(line, effectiveApiKey)
                 if (searchResults.isNotEmpty()) {
                     val best = searchResults.first()
-                    dao.insert(best)
                     return best
                 }
             }

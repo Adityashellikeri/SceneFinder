@@ -29,14 +29,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +53,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -116,6 +121,7 @@ fun SettingsScreen(
     var syncStatus by remember { mutableStateOf("") }
     var isSyncing by remember { mutableStateOf(false) }
     var tmdbLoginPending by remember { mutableStateOf(false) }
+    var showClearDialog by remember { mutableStateOf(false) }
 
     val isAnilistConnected = currentToken.isNotBlank()
     val isTmdbConnected = tmdbSessionId.isNotBlank() && tmdbAccountId >= 0
@@ -846,6 +852,77 @@ fun SettingsScreen(
                 }
             }
         }
+
+        // Clear History & Library option at the very last
+        item {
+            IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                IGSettingsSectionHeader(
+                    icon = Icons.Default.DeleteOutline,
+                    title = "Library & History Storage",
+                    subtitle = "Manage your scanned entries and local library"
+                )
+                Spacer(Modifier.height(14.dp))
+                Button(
+                    onClick = { showClearDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = IGRed.copy(alpha = 0.15f),
+                        contentColor = IGRed
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, IGRed.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteForever,
+                        contentDescription = "Clear History",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Clear All History & Library",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp
+                    )
+                }
+            }
+        }
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear All History?", color = IGTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This will remove all scanned and saved anime, movies, and manga from your local library. Cloud libraries (AniList/TMDB) will remain untouched.",
+                    color = IGTextSecondary,
+                    fontSize = 13.5.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearDialog = false
+                        scope.launch(Dispatchers.IO) {
+                            repository.clearAllHistory()
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "History cleared successfully", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = IGRed)
+                ) {
+                    Text("Clear All", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("Cancel", color = IGTextSecondary)
+                }
+            },
+            containerColor = IGCard,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 }
 

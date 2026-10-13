@@ -1,4 +1,4 @@
-﻿package com.scenefinder.domain.parser
+package com.scenefinder.domain.parser
 
 import java.util.regex.Pattern
 
@@ -7,9 +7,10 @@ object HeuristicCleaner {
     private val BLOCKED_EXACT_OR_SUBSTRING = setOf(
         // Social Media & Common Apps
         "instagram", "youtube", "tiktok", "reels", "shorts", "facebook", "whatsapp",
-        "twitter", "reddit", "telegram", "snapchat", "chrome", "google", "settings",
-        "camera", "photos", "gallery", "music", "play store", "gmail", "spotify",
-        "system ui", "android", "vivo", "funtouch", "launcher", "home screen",
+        "twitter", "reddit", "telegram", "snapchat", "chrome", "google", "google app",
+        "quicksearchbox", "google lens", "assistant", "settings", "camera", "photos",
+        "gallery", "music", "play store", "gmail", "spotify", "system ui", "android",
+        "vivo", "funtouch", "launcher", "home screen", "pixel launcher", "clock",
 
         // Social Media Controls & Buttons
         "like", "likes", "share", "shares", "comment", "comments", "remix", "subscribe",
@@ -24,7 +25,13 @@ object HeuristicCleaner {
         "images", "videos", "news", "send feedback", "feedback", "about this result",
         "more results", "more like this", "filters", "filter", "visit", "open in app",
         "copy text", "listen", "select all", "web results", "people also ask",
-        "related searches", "overview", "cast", "reviews", "similar"
+        "related searches", "overview", "cast", "reviews", "similar", "web search"
+    )
+
+    private val BLOCKED_CONTAINS_PATTERNS = listOf(
+        "google", "quicksearchbox", "google lens", "pixel launcher", "system ui",
+        "search with image", "visual match", "open in app", "play store", "play services",
+        "android.", "com.google"
     )
 
     // Common conversational/dialogue words -- if a line is dominated by these it is a subtitle
@@ -90,6 +97,7 @@ object HeuristicCleaner {
 
         val lower = trimmed.lowercase()
         if (BLOCKED_EXACT_OR_SUBSTRING.contains(lower)) return true
+        if (BLOCKED_CONTAINS_PATTERNS.any { lower.contains(it) }) return true
 
         if (URL_PATTERN.matcher(trimmed).matches()) return true
         if (TIME_BATTERY_PATTERN.matcher(trimmed).matches()) return true
