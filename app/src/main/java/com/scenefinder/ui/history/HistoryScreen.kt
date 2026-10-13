@@ -50,6 +50,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
@@ -298,7 +300,9 @@ fun HistoryScreen(
     settings: AppSettings,
     modifier: Modifier = Modifier,
     startInSearch: Boolean = false,
-    onBackToHome: () -> Unit = {}
+    onBackToHome: () -> Unit = {},
+    onNavigateToDiscover: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val historyList by dao.getAllHistory().collectAsState(initial = emptyList())
     val context = LocalContext.current
@@ -736,6 +740,8 @@ fun HistoryScreen(
                         settings.setPageWiseLayout(next)
                         Toast.makeText(context, if (next) "Page-by-page mode enabled" else "Continuous scroll mode enabled", Toast.LENGTH_SHORT).show()
                     },
+                    onNavigateToDiscover = onNavigateToDiscover,
+                    onNavigateToSettings = onNavigateToSettings,
                     onSync = ::triggerCloudSync
                 )
             }
@@ -969,7 +975,6 @@ fun HistoryScreen(
                         media = media,
                         isSelected = isSelected,
                         isSelectionMode = isSelectionMode,
-                        showStatusBorder = selectedStatusFilter == "ALL",
                         modifier = Modifier.fillMaxWidth(),
                         onClick = onCardClick,
                         onLongClick = { item ->
@@ -1272,6 +1277,48 @@ private fun StatusSelectionDialog(
     }
 }
 
+@Composable
+private fun FlashyAppLogo(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        Color(0xFFFF007A), // Neon Laser Magenta
+                        Color(0xFF7928CA), // Electric Violet
+                        Color(0xFF00F2FE)  // Cyber Cyan
+                    )
+                )
+            )
+            .padding(2.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(Color(0xFF0D0D1A)),
+        contentAlignment = Alignment.Center
+    ) {
+        // Futuristic glowing aperture / viewfinder
+        Box(
+            modifier = Modifier
+                .size(16.dp)
+                .clip(CircleShape)
+                .border(
+                    1.5.dp,
+                    Brush.sweepGradient(listOf(Color(0xFFFF007A), Color(0xFF00F2FE), Color(0xFFFF007A))),
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF00F2FE))
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun IGTopBar(
@@ -1287,6 +1334,8 @@ private fun IGTopBar(
     isCloudSyncing: Boolean = false,
     isPageWise: Boolean = false,
     onTogglePageWise: () -> Unit = {},
+    onNavigateToDiscover: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     onSync: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth().background(IGBlack).statusBarsPadding()) {
@@ -1338,13 +1387,34 @@ private fun IGTopBar(
                 )
                 LaunchedEffect(Unit) { focusRequester.requestFocus() }
             } else {
-                Text(
-                    text = "SceneFinder",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.headlineMedium.copy(brush = storyRingBrushHoriz),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
-                )
+                ) {
+                    FlashyAppLogo()
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "SceneFinder",
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            brush = Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFFFF007A), // Neon Laser Magenta
+                                    Color(0xFF8B5CF6), // Neon Violet
+                                    Color(0xFF00F2FE)  // Cyber Cyan
+                                )
+                            )
+                        ),
+                        letterSpacing = (-0.5).sp
+                    )
+                }
+                IconButton(onClick = onNavigateToDiscover) {
+                    Icon(Icons.Outlined.Explore, "Discover", tint = IGTextPrimary, modifier = Modifier.size(22.dp))
+                }
+                IconButton(onClick = onNavigateToSettings) {
+                    Icon(Icons.Outlined.Settings, "Settings", tint = IGTextPrimary, modifier = Modifier.size(22.dp))
+                }
                 IconButton(onClick = onTogglePageWise) {
                     Icon(
                         imageVector = Icons.Default.AutoStories,
@@ -1380,7 +1450,6 @@ private fun IGPosterCard(
     media: EnrichedMediaEntity,
     isSelected: Boolean,
     isSelectionMode: Boolean,
-    showStatusBorder: Boolean,
     onClick: (EnrichedMediaEntity) -> Unit,
     onLongClick: (EnrichedMediaEntity) -> Unit,
     modifier: Modifier = Modifier
@@ -1400,18 +1469,9 @@ private fun IGPosterCard(
         label = "poster_scale"
     )
 
-    // Dynamic border color based on status or selection
-    val statusColor = remember(media.userStatus) { getStatusColor(media.userStatus) }
-    val targetBorderColor = when {
-        isSelected -> IGGradMid
-        showStatusBorder -> statusColor
-        else -> Color.Transparent
-    }
-    val targetBorderWidth = when {
-        isSelected -> 2.5.dp
-        showStatusBorder -> 2.dp
-        else -> 0.dp
-    }
+    // Revert to clean, normal border (highlight only when selected in multi-select mode)
+    val targetBorderColor = if (isSelected) IGGradMid else Color(0x22FFFFFF)
+    val targetBorderWidth = if (isSelected) 2.5.dp else 0.5.dp
     val borderColor by animateColorAsState(targetBorderColor, tween(200), label = "border_color")
 
     val imageRequest = remember(media.posterUrl) {
@@ -1431,11 +1491,7 @@ private fun IGPosterCard(
             .aspectRatio(0.67f)
             .clip(RoundedCornerShape(6.dp))
             .background(IGSurface)
-            .then(
-                if (targetBorderWidth > 0.dp) {
-                    Modifier.border(targetBorderWidth, borderColor, RoundedCornerShape(6.dp))
-                } else Modifier
-            )
+            .border(targetBorderWidth, borderColor, RoundedCornerShape(6.dp))
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1465,7 +1521,7 @@ private fun IGPosterCard(
             }
         }
 
-        // Bottom gradient overlay with title and rating
+        // Bottom gradient overlay with title, type, rating and status tag
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1476,13 +1532,39 @@ private fun IGPosterCard(
             Column {
                 val typeColor = remember(media.mediaType) { getMediaTypeColor(media.mediaType) }
                 val ratingStr = remember(media.rating) { media.rating?.let { "%.1f".format(it) } }
-                Text(
-                    media.mediaType.uppercase(),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = typeColor,
-                    letterSpacing = 0.5.sp
-                )
+                val statusTag = remember(media.userStatus) {
+                    when (media.userStatus) {
+                        "CURRENT" -> "WATCHING" to Color(0xFF0095F6)
+                        "PLANNING" -> "PLAN" to Color(0xFFA855F7)
+                        "COMPLETED" -> "COMPLETED" to Color(0xFF10B981)
+                        "DROPPED" -> "DROPPED" to Color(0xFFEF4444)
+                        else -> null
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        media.mediaType.uppercase(),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = typeColor,
+                        letterSpacing = 0.5.sp
+                    )
+                    if (statusTag != null) {
+                        Text(
+                            text = "● ${statusTag.first}",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = statusTag.second,
+                            letterSpacing = 0.3.sp
+                        )
+                    }
+                }
+
                 Text(
                     media.cleanTitle,
                     fontSize = 11.sp,
@@ -1525,16 +1607,47 @@ private fun IGPosterCard(
             }
         }
 
-        // Status indicator dot at top-right (when not selected)
+        // Status differentiation glassmorphic pill badge at top-right
         if (!isSelected) {
-            Box(
-                modifier = Modifier
-                    .padding(6.dp)
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(statusColor)
-                    .align(Alignment.TopEnd)
-            )
+            val statusInfo = remember(media.userStatus) {
+                when (media.userStatus) {
+                    "CURRENT" -> "Watching" to Color(0xFF0095F6)
+                    "PLANNING" -> "Plan" to Color(0xFFA855F7)
+                    "COMPLETED" -> "Completed" to Color(0xFF10B981)
+                    "DROPPED" -> "Dropped" to Color(0xFFEF4444)
+                    else -> null
+                }
+            }
+            if (statusInfo != null) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.Black.copy(alpha = 0.78f),
+                    border = BorderStroke(0.5.dp, statusInfo.second.copy(alpha = 0.65f)),
+                    modifier = Modifier
+                        .padding(5.dp)
+                        .align(Alignment.TopEnd)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(statusInfo.second)
+                        )
+                        Text(
+                            text = statusInfo.first,
+                            color = Color.White,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.3.sp
+                        )
+                    }
+                }
+            }
         }
     }
 }

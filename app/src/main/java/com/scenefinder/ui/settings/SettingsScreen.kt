@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.OpenInNew
@@ -41,6 +42,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -90,7 +92,8 @@ private val headerGradient = Brush.horizontalGradient(listOf(IGGradStart, IGGrad
 fun SettingsScreen(
     settings: AppSettings,
     repository: MediaEnrichmentRepository,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -128,16 +131,35 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .background(IGBlack)
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                Text(
-                    text = "Settings",
-                    style = androidx.compose.ui.text.TextStyle(
-                        brush = headerGradient,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (onBack != null) {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = IGTextPrimary
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = "Settings",
+                        style = androidx.compose.ui.text.TextStyle(
+                            brush = headerGradient,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     )
-                )
+                }
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = "Configure your SceneFinder accounts and preferences",
                     color = IGTextSecondary,

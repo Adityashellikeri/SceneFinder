@@ -338,81 +338,81 @@ private fun MainAppScaffold(
 
     val navItems = listOf(
         NavItem("Library",  Icons.Outlined.Home,    Icons.Filled.Home),
-        NavItem("Search",   Icons.Outlined.Search,  Icons.Filled.Search),
-        NavItem("Discover", Icons.Outlined.Explore, Icons.Filled.Explore),
-        NavItem("Settings", Icons.Outlined.Settings,Icons.Filled.Settings)
+        NavItem("Search",   Icons.Outlined.Search,  Icons.Filled.Search)
     )
 
     Scaffold(
         containerColor = IGBlack,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black)
-                    .navigationBarsPadding()
-            ) {
-                // Subtle 0.5dp top border
-                Box(
+            if (selectedIndex in 0..1) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(0.5.dp)
-                        .background(IGDivider)
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
+                        .background(Color.Black)
+                        .navigationBarsPadding()
                 ) {
-                    navItems.forEachIndexed { index, item ->
-                        val selected = selectedIndex == index
-                        val iconScale by animateFloatAsState(
-                            targetValue = if (selected) 1.15f else 1.0f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMedium
-                            ),
-                            label = "tab_scale"
-                        )
-                        val iconColor by animateColorAsState(
-                            targetValue = if (selected) IGTextPrimary else IGTextSecondary,
-                            animationSpec = tween(150),
-                            label = "tab_color"
-                        )
+                    // Subtle 0.5dp top border
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(IGDivider)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 32.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        navItems.forEachIndexed { index, item ->
+                            val selected = selectedIndex == index
+                            val iconScale by animateFloatAsState(
+                                targetValue = if (selected) 1.15f else 1.0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                ),
+                                label = "tab_scale"
+                            )
+                            val iconColor by animateColorAsState(
+                                targetValue = if (selected) IGTextPrimary else IGTextSecondary,
+                                animationSpec = tween(150),
+                                label = "tab_color"
+                            )
 
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { navigateToTab(index) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { navigateToTab(index) },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = if (selected) item.selectedIcon else item.icon,
-                                    contentDescription = item.label,
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .scale(iconScale),
-                                    tint = iconColor
-                                )
-                                Spacer(Modifier.height(3.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(4.dp)
-                                        .clip(CircleShape)
-                                        .background(if (selected) IGTextPrimary else Color.Transparent)
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (selected) item.selectedIcon else item.icon,
+                                        contentDescription = item.label,
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .scale(iconScale),
+                                        tint = iconColor
+                                    )
+                                    Spacer(Modifier.height(3.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(4.dp)
+                                            .clip(CircleShape)
+                                            .background(if (selected) IGTextPrimary else Color.Transparent)
+                                    )
+                                }
                             }
                         }
                     }
@@ -430,7 +430,9 @@ private fun MainAppScaffold(
                 0 -> HistoryScreen(
                     dao = dao,
                     repository = repository,
-                    settings = settings
+                    settings = settings,
+                    onNavigateToDiscover = { navigateToTab(2) },
+                    onNavigateToSettings = { navigateToTab(3) }
                 )
                 1 -> HistoryScreen(
                     dao = dao,
@@ -443,10 +445,28 @@ private fun MainAppScaffold(
                         } else {
                             navigateToTab(0)
                         }
+                    },
+                    onNavigateToDiscover = { navigateToTab(2) },
+                    onNavigateToSettings = { navigateToTab(3) }
+                )
+                2 -> OnboardingScreen(onContinueToDashboard = {
+                    if (tabBackStack.size > 1) {
+                        tabBackStack.removeAt(tabBackStack.lastIndex)
+                    } else {
+                        navigateToTab(0)
+                    }
+                })
+                3 -> SettingsScreen(
+                    settings = settings,
+                    repository = repository,
+                    onBack = {
+                        if (tabBackStack.size > 1) {
+                            tabBackStack.removeAt(tabBackStack.lastIndex)
+                        } else {
+                            navigateToTab(0)
+                        }
                     }
                 )
-                2 -> OnboardingScreen(onContinueToDashboard = { navigateToTab(0) })
-                3 -> SettingsScreen(settings = settings, repository = repository)
             }
         }
     }
