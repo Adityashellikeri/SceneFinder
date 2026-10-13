@@ -52,7 +52,10 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -1281,39 +1284,55 @@ private fun StatusSelectionDialog(
 private fun FlashyAppLogo(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .size(32.dp)
-            .clip(RoundedCornerShape(9.dp))
+            .size(30.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 Brush.linearGradient(
                     listOf(
-                        Color(0xFFFF007A), // Neon Laser Magenta
-                        Color(0xFF7928CA), // Electric Violet
-                        Color(0xFF00F2FE)  // Cyber Cyan
+                        Color(0xFF00F2FE), // Cyber Cyan
+                        Color(0xFF2563EB), // Electric Blue
+                        Color(0xFF38EF7D)  // Neon Emerald
                     )
                 )
             )
-            .padding(2.dp)
-            .clip(RoundedCornerShape(7.dp))
-            .background(Color(0xFF0D0D1A)),
+            .padding(1.5.dp)
+            .clip(RoundedCornerShape(6.5.dp))
+            .background(Color(0xFF080D1A)),
         contentAlignment = Alignment.Center
     ) {
-        // Futuristic glowing aperture / viewfinder
-        Box(
-            modifier = Modifier
-                .size(16.dp)
-                .clip(CircleShape)
-                .border(
-                    1.5.dp,
-                    Brush.sweepGradient(listOf(Color(0xFFFF007A), Color(0xFF00F2FE), Color(0xFFFF007A))),
-                    CircleShape
+        androidx.compose.foundation.Canvas(modifier = Modifier.size(17.dp)) {
+            val w = size.width
+            val h = size.height
+
+            // Glowing cinematic play prism
+            val playPath = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.28f, h * 0.18f)
+                lineTo(w * 0.82f, h * 0.50f)
+                lineTo(w * 0.28f, h * 0.82f)
+                close()
+            }
+            drawPath(
+                path = playPath,
+                brush = Brush.linearGradient(
+                    listOf(Color(0xFF00F2FE), Color(0xFF38EF7D))
+                )
+            )
+
+            // High-tech horizontal scanner laser line
+            drawLine(
+                brush = Brush.horizontalGradient(
+                    listOf(Color.Transparent, Color.White, Color(0xFF00F2FE), Color.Transparent)
                 ),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(5.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF00F2FE))
+                start = androidx.compose.ui.geometry.Offset(0f, h * 0.5f),
+                end = androidx.compose.ui.geometry.Offset(w, h * 0.5f),
+                strokeWidth = 1.5.dp.toPx()
+            )
+
+            // Optical focal point
+            drawCircle(
+                color = Color.White,
+                radius = 1.5.dp.toPx(),
+                center = androidx.compose.ui.geometry.Offset(w * 0.48f, h * 0.5f)
             )
         }
     }
@@ -1338,9 +1357,11 @@ private fun IGTopBar(
     onNavigateToSettings: () -> Unit = {},
     onSync: () -> Unit = {}
 ) {
+    var showOptionsMenu by remember { mutableStateOf(false) }
+
     Column(modifier = Modifier.fillMaxWidth().background(IGBlack).statusBarsPadding()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isSearchActive) {
@@ -1387,6 +1408,7 @@ private fun IGTopBar(
                 )
                 LaunchedEffect(Unit) { focusRequester.requestFocus() }
             } else {
+                // Title and Logo (Guaranteed single line, never wraps vertically)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
@@ -1395,48 +1417,120 @@ private fun IGTopBar(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "SceneFinder",
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Black,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.headlineMedium.copy(
                             brush = Brush.horizontalGradient(
                                 listOf(
-                                    Color(0xFFFF007A), // Neon Laser Magenta
-                                    Color(0xFF8B5CF6), // Neon Violet
-                                    Color(0xFF00F2FE)  // Cyber Cyan
+                                    Color(0xFF00F2FE), // Cyber Cyan
+                                    Color(0xFF38EF7D), // Emerald Neon
+                                    Color(0xFFFFFFFF)  // Pure White
                                 )
                             )
                         ),
-                        letterSpacing = (-0.5).sp
+                        letterSpacing = (-0.3).sp
                     )
                 }
-                IconButton(onClick = onNavigateToDiscover) {
-                    Icon(Icons.Outlined.Explore, "Discover", tint = IGTextPrimary, modifier = Modifier.size(22.dp))
+
+                // Merged Discover & Settings Action Button with Quick Dropdown
+                Box {
+                    IconButton(
+                        onClick = { showOptionsMenu = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Tune,
+                            contentDescription = "Options & Settings",
+                            tint = IGTextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showOptionsMenu,
+                        onDismissRequest = { showOptionsMenu = false },
+                        modifier = Modifier
+                            .background(IGCard)
+                            .border(0.5.dp, IGDivider, RoundedCornerShape(12.dp))
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.Explore, contentDescription = null, tint = Color(0xFF00F2FE), modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Discover SceneFinder", color = IGTextPrimary, fontSize = 13.5.sp)
+                                }
+                            },
+                            onClick = {
+                                showOptionsMenu = false
+                                onNavigateToDiscover()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.Settings, contentDescription = null, tint = IGTextSecondary, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Settings & Sync", color = IGTextPrimary, fontSize = 13.5.sp)
+                                }
+                            },
+                            onClick = {
+                                showOptionsMenu = false
+                                onNavigateToSettings()
+                            }
+                        )
+                        if (showClearAll) {
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("Clear History", color = Color(0xFFEF4444), fontSize = 13.5.sp)
+                                    }
+                                },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    onClearAll()
+                                }
+                            )
+                        }
+                    }
                 }
-                IconButton(onClick = onNavigateToSettings) {
-                    Icon(Icons.Outlined.Settings, "Settings", tint = IGTextPrimary, modifier = Modifier.size(22.dp))
-                }
-                IconButton(onClick = onTogglePageWise) {
+
+                // Page-Wise / Scroll Toggle
+                IconButton(
+                    onClick = onTogglePageWise,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.AutoStories,
                         contentDescription = if (isPageWise) "Switch to Infinite Scroll" else "Switch to Page-Wise Mode",
-                        tint = if (isPageWise) IGGradMid else IGTextPrimary,
-                        modifier = Modifier.size(22.dp)
+                        tint = if (isPageWise) Color(0xFF00F2FE) else IGTextPrimary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-                IconButton(onClick = onSync) {
+
+                // Library Sync Button
+                IconButton(
+                    onClick = onSync,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     if (isCloudSyncing) {
-                        CircularProgressIndicator(color = IGGradMid, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                        CircularProgressIndicator(color = Color(0xFF00F2FE), strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     } else {
-                        Icon(Icons.Default.Refresh, "Sync Library", tint = IGTextPrimary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Refresh, "Sync Library", tint = IGTextPrimary, modifier = Modifier.size(20.dp))
                     }
                 }
-                IconButton(onClick = onSearchToggle) {
-                    Icon(Icons.Default.Search, "Search", tint = IGTextPrimary, modifier = Modifier.size(24.dp))
-                }
-                if (showClearAll) {
-                    IconButton(onClick = onClearAll) {
-                        Icon(Icons.Default.Delete, "Clear", tint = IGTextSecondary, modifier = Modifier.size(22.dp))
-                    }
+
+                // Search Button
+                IconButton(
+                    onClick = onSearchToggle,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.Search, "Search", tint = IGTextPrimary, modifier = Modifier.size(21.dp))
                 }
             }
         }

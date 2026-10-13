@@ -5,7 +5,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Deep Cosmic Dark Background -->
+    <!-- Deep Tech Obsidian Background -->
     <path
         android:pathData="M16,6 L92,6 A10,10 0 0 1 102,16 L102,92 A10,10 0 0 1 92,102 L16,102 A10,10 0 0 1 6,92 L6,16 A10,10 0 0 1 16,6 Z">
         <aapt:attr name="android:fillColor">
@@ -15,108 +15,118 @@
                 android:endX="98"
                 android:endY="98"
                 android:type="linear">
-                <item android:offset="0.0" android:color="#FF0D0D1A" />
-                <item android:offset="0.5" android:color="#FF1A0B2E" />
-                <item android:offset="1.0" android:color="#FF061024" />
+                <item android:offset="0.0" android:color="#FF080C16" />
+                <item android:offset="0.5" android:color="#FF0E172A" />
+                <item android:offset="1.0" android:color="#FF020617" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Glowing Outer Neon Ring -->
+    <!-- Outer Cinematic Diamond Viewfinder Frame -->
     <path
-        android:pathData="M54,18 A36,36 0 1 1 53.9,18 Z"
-        android:strokeWidth="3.5">
+        android:pathData="M54,16 L88,54 L54,92 L20,54 Z"
+        android:strokeWidth="2.5">
         <aapt:attr name="android:strokeColor">
             <gradient
-                android:startX="18"
-                android:startY="18"
-                android:endX="90"
-                android:endY="90"
+                android:startX="20"
+                android:startY="16"
+                android:endX="88"
+                android:endY="92"
                 android:type="linear">
-                <item android:offset="0.0" android:color="#FFFF007A" />
-                <item android:offset="0.5" android:color="#FF7928CA" />
-                <item android:offset="1.0" android:color="#FF00F2FE" />
+                <item android:offset="0.0" android:color="#FF00F2FE" />
+                <item android:offset="0.5" android:color="#FF2563EB" />
+                <item android:offset="1.0" android:color="#FF38EF7D" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Futuristic Viewfinder Brackets -->
+    <!-- Outer Diamond Translucent Fill -->
+    <path
+        android:pathData="M54,16 L88,54 L54,92 L20,54 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="20"
+                android:startY="16"
+                android:endX="88"
+                android:endY="92"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#1A00F2FE" />
+                <item android:offset="1.0" android:color="#1A2563EB" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Viewfinder Reticle Brackets -->
     <!-- Top-Left Bracket -->
     <path
-        android:pathData="M24,34 L24,24 L34,24"
+        android:pathData="M18,30 L18,18 L30,18"
         android:strokeColor="#FF00F2FE"
-        android:strokeWidth="3"
+        android:strokeWidth="3.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 
     <!-- Top-Right Bracket -->
     <path
-        android:pathData="M74,24 L84,24 L84,34"
-        android:strokeColor="#FFFF007A"
-        android:strokeWidth="3"
+        android:pathData="M78,18 L90,18 L90,30"
+        android:strokeColor="#FF00F2FE"
+        android:strokeWidth="3.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 
     <!-- Bottom-Left Bracket -->
     <path
-        android:pathData="M24,74 L24,84 L34,84"
-        android:strokeColor="#FF7928CA"
-        android:strokeWidth="3"
+        android:pathData="M18,78 L18,90 L30,90"
+        android:strokeColor="#FF2563EB"
+        android:strokeWidth="3.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 
     <!-- Bottom-Right Bracket -->
     <path
-        android:pathData="M74,84 L84,84 L84,74"
-        android:strokeColor="#FF00F2FE"
-        android:strokeWidth="3"
+        android:pathData="M78,90 L90,90 L90,78"
+        android:strokeColor="#FF2563EB"
+        android:strokeWidth="3.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 
-    <!-- Inner Aperture / Scene Circle -->
+    <!-- Sharp Futuristic Media Play Prism (Centerpiece) -->
     <path
-        android:pathData="M54,32 A22,22 0 1 1 53.9,32 Z">
+        android:pathData="M44,36 L72,54 L44,72 Z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:startX="32"
-                android:startY="32"
-                android:endX="76"
-                android:endY="76"
+                android:startX="44"
+                android:startY="36"
+                android:endX="72"
+                android:endY="72"
                 android:type="linear">
-                <item android:offset="0.0" android:color="#33FF007A" />
-                <item android:offset="1.0" android:color="#3300F2FE" />
+                <item android:offset="0.0" android:color="#FF00F2FE" />
+                <item android:offset="0.6" android:color="#FF38EF7D" />
+                <item android:offset="1.0" android:color="#FFFFFFFF" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Optical Lens Elements / Aperture Blades -->
+    <!-- Horizontal Laser Scanline Cutting Through Scene -->
     <path
-        android:pathData="M54,35 L69,45 L60,63 L45,63 L39,48 Z"
-        android:strokeWidth="2.5"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeAlpha="0.6">
-        <aapt:attr name="android:fillColor">
+        android:pathData="M12,54 L96,54"
+        android:strokeWidth="2">
+        <aapt:attr name="android:strokeColor">
             <gradient
-                android:startX="39"
-                android:startY="35"
-                android:endX="69"
-                android:endY="63"
+                android:startX="12"
+                android:startY="54"
+                android:endX="96"
+                android:endY="54"
                 android:type="linear">
-                <item android:offset="0.0" android:color="#80FF007A" />
-                <item android:offset="0.5" android:color="#807928CA" />
-                <item android:offset="1.0" android:color="#8000F2FE" />
+                <item android:offset="0.0" android:color="#0000F2FE" />
+                <item android:offset="0.5" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#0000F2FE" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Center Glowing Scene Spark (Target) -->
+    <!-- Center Laser Focus Optical Core -->
     <path
-        android:pathData="M54,46 L56.5,51.5 L62,54 L56.5,56.5 L54,62 L51.5,56.5 L46,54 L51.5,51.5 Z"
+        android:pathData="M54,54 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0"
         android:fillColor="#FFFFFFFF" />
-
-    <!-- Center Lens Core Dot -->
-    <path
-        android:pathData="M54,52 A2,2 0 1 1 53.9,52 Z"
-        android:fillColor="#FF00F2FE" />
 
 </vector>
