@@ -42,14 +42,12 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        }
+    fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient {
+        val cache = okhttp3.Cache(context.cacheDir.resolve("http_cache"), 50L * 1024 * 1024)
         return OkHttpClient.Builder()
-            .addInterceptor(logging)
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
+            .cache(cache)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
             .build()
     }
 

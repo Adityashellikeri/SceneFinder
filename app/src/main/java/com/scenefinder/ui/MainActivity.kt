@@ -17,6 +17,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -378,13 +379,10 @@ private fun MainAppScaffold(
                 .padding(paddingValues)
                 .background(IGBlack)
         ) {
-            AnimatedContent(
+            Crossfade(
                 targetState = selectedIndex,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(150, easing = FastOutSlowInEasing))
-                        .togetherWith(fadeOut(animationSpec = tween(120, easing = FastOutSlowInEasing)))
-                },
-                label = "nav_anim"
+                animationSpec = tween(120),
+                label = "nav_crossfade"
             ) { idx ->
                 when (idx) {
                     0 -> HistoryScreen(

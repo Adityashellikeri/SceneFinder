@@ -147,6 +147,7 @@ fun HistoryScreen(
     val searchFocusRequester = remember { FocusRequester() }
 
     var itemToSaveWithStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
+    var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var visibleRowsCount by remember { mutableStateOf(10) }
 
     var searchQuery by remember { mutableStateOf("") }
@@ -156,6 +157,17 @@ fun HistoryScreen(
     var hasSearched by remember { mutableStateOf(false) }
     var isSearchBarActive by remember { mutableStateOf(startInSearch) }
     var selectedStatusFilter by remember { mutableStateOf("ALL") }
+    var selectedMediaTypeFilter by remember { mutableStateOf("ALL") }
+
+    val mediaTypeFilters = listOf(
+        "ALL" to "All",
+        "Anime" to "Anime",
+        "Manga" to "Manga",
+        "Movie" to "Movie",
+        "Manhwa" to "Manhwa",
+        "TV Shows" to "TV Shows",
+        "Web Series" to "Web Series"
+    )
 
     // Categories for Search: Anime, Manga, Movie, Manhwa, Web Series, TV Shows
     val searchCategories = listOf(
@@ -314,44 +326,71 @@ fun HistoryScreen(
         }
     }
 
-    val filteredLibrary = when (selectedStatusFilter) {
-        "ALL" -> historyList
-        else -> historyList.filter { it.userStatus == selectedStatusFilter }
+    val filteredLibrary = remember(historyList, selectedStatusFilter, selectedMediaTypeFilter) {
+        var list = historyList
+        if (selectedStatusFilter != "ALL") {
+            list = list.filter { it.userStatus == selectedStatusFilter }
+        }
+        if (selectedMediaTypeFilter != "ALL") {
+            list = when (selectedMediaTypeFilter) {
+                "TV Shows" -> list.filter {
+                    it.mediaType.equals("TV Shows", ignoreCase = true) ||
+                    it.mediaType.equals("TV Series", ignoreCase = true)
+                }
+                "Web Series" -> list.filter {
+                    it.mediaType.equals("Web Series", ignoreCase = true)
+                }
+                else -> list.filter {
+                    it.mediaType.equals(selectedMediaTypeFilter, ignoreCase = true)
+                }
+            }
+        }
+        list
+    }
+
+    val allLibraryPairs = remember(filteredLibrary) {
+        filteredLibrary.chunked(3)
+    }
+
+    val displayedLibraryPairs = remember(allLibraryPairs, visibleRowsCount) {
+        allLibraryPairs.take(visibleRowsCount)
     }
 
     // Filter search results by categorical options
-    val displayedSearchResults = when (selectedSearchCategory) {
-        "ALL" -> searchResults
-        "Web Series" -> searchResults.filter {
-            it.mediaType.equals("Web Series", ignoreCase = true)
-        }
-        "TV Shows" -> searchResults.filter {
-            it.mediaType.equals("TV Shows", ignoreCase = true) ||
-            it.mediaType.equals("TV Series", ignoreCase = true)
-        }
-        else -> searchResults.filter {
-            it.mediaType.equals(selectedSearchCategory, ignoreCase = true)
-        }
-    }
-
-    val displayedPredictions = if (selectedSearchCategory == "ALL") {
-        predictedSuggestions
-    } else {
-        searchResults
-            .filter {
-                when (selectedSearchCategory) {
-                    "Web Series" -> it.mediaType.equals("Web Series", ignoreCase = true)
-                    "TV Shows" -> it.mediaType.equals("TV Shows", ignoreCase = true) ||
-                        it.mediaType.equals("TV Series", ignoreCase = true)
-                    else -> it.mediaType.equals(selectedSearchCategory, ignoreCase = true)
-                }
+    val displayedSearchResults = remember(searchResults, selectedSearchCategory) {
+        when (selectedSearchCategory) {
+            "ALL" -> searchResults
+            "Web Series" -> searchResults.filter {
+                it.mediaType.equals("Web Series", ignoreCase = true)
             }
-            .map { it.cleanTitle }
-            .distinct()
-            .take(8)
+            "TV Shows" -> searchResults.filter {
+                it.mediaType.equals("TV Shows", ignoreCase = true) ||
+                it.mediaType.equals("TV Series", ignoreCase = true)
+            }
+            else -> searchResults.filter {
+                it.mediaType.equals(selectedSearchCategory, ignoreCase = true)
+            }
+        }
     }
 
-    val libraryPairs = remember(filteredLibrary) { filteredLibrary.chunked(2) }
+    val displayedPredictions = remember(searchResults, predictedSuggestions, selectedSearchCategory) {
+        if (selectedSearchCategory == "ALL") {
+            predictedSuggestions
+        } else {
+            searchResults
+                .filter {
+                    when (selectedSearchCategory) {
+                        "Web Series" -> it.mediaType.equals("Web Series", ignoreCase = true)
+                        "TV Shows" -> it.mediaType.equals("TV Shows", ignoreCase = true) ||
+                            it.mediaType.equals("TV Series", ignoreCase = true)
+                        else -> it.mediaType.equals(selectedSearchCategory, ignoreCase = true)
+                    }
+                }
+                .map { it.cleanTitle }
+                .distinct()
+                .take(8)
+        }
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize().background(IGBlack),
@@ -551,7 +590,7 @@ fun HistoryScreen(
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                 ) {
                     items(statusFilters) { (code, label) ->
                         val selected = selectedStatusFilter == code
@@ -570,49 +609,47 @@ fun HistoryScreen(
                 }
             }
 
+            // Media type filter chips
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.padding(bottom = 6.dp)
+                ) {
+                    items(mediaTypeFilters) { (code, label) ->
+                        val selected = selectedMediaTypeFilter == code
+                        val chipColor = if (selected) { if (code == "ALL") IGTextPrimary else getMediaTypeColor(code) } else IGCard
+                        val chipBorder = if (selected) Color.Transparent else IGDivider
+                        val chipTextColor by animateColorAsState(if (selected) { if (code == "ALL") IGBlack else Color.White } else IGTextSecondary, tween(200), label = "mt")
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(chipColor)
+                                .border(1.dp, chipBorder, RoundedCornerShape(16.dp))
+                                .clickable { selectedMediaTypeFilter = code }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = chipTextColor
+                            )
+                        }
+                    }
+                }
+            }
+
             if (filteredLibrary.isEmpty()) {
                 item { IGEmptyState(selectedStatusFilter) }
             } else {
-                val allLibraryPairs = filteredLibrary.chunked(3)
-                val displayedLibraryPairs = allLibraryPairs.take(visibleRowsCount)
-
-                items(displayedLibraryPairs, key = { pair -> pair.joinToString("_") { it.id } }) { pair ->
+                items(displayedLibraryPairs, key = { pair -> pair.firstOrNull()?.id ?: pair.hashCode() }) { pair ->
                     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         pair.forEach { media ->
                             IGPosterCard(
                                 media = media,
                                 modifier = Modifier.weight(1f),
-                                onStatusChange = { newStatus ->
-                                    scope.launch(Dispatchers.IO) {
-                                        val synced = repository.updateMediaStatus(
-                                            media = media,
-                                            newStatus = newStatus,
-                                            anilistToken = anilistToken,
-                                            tmdbApiKey = apiKey,
-                                            tmdbSessionId = tmdbSessionId,
-                                            tmdbAccountId = tmdbAccountId
-                                        )
-                                        launch(Dispatchers.Main) {
-                                            Toast.makeText(context, if (synced) "Synced with cloud" else "Status updated", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                onOpen = {
-                                    media.directWebUrl?.let { url ->
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK })
-                                    }
-                                },
-                                onDelete = {
-                                    scope.launch(Dispatchers.IO) {
-                                        repository.removeFromLibrary(
-                                            media = media,
-                                            anilistToken = anilistToken,
-                                            tmdbApiKey = apiKey,
-                                            tmdbSessionId = tmdbSessionId,
-                                            tmdbAccountId = tmdbAccountId
-                                        )
-                                    }
-                                }
+                                onClick = { selectedMediaForDetail = media }
                             )
                         }
                         if (pair.size == 1) Spacer(Modifier.weight(2f))
@@ -643,6 +680,50 @@ fun HistoryScreen(
                 }
             }
         }
+    }
+
+    // Modal dialog to view and update details/status for a library item
+    selectedMediaForDetail?.let { detailItem ->
+        val latestMedia = historyList.find { it.id == detailItem.id } ?: detailItem
+        MediaDetailDialog(
+            media = latestMedia,
+            onDismiss = { selectedMediaForDetail = null },
+            onStatusChange = { newStatus ->
+                scope.launch(Dispatchers.IO) {
+                    val synced = repository.updateMediaStatus(
+                        media = latestMedia,
+                        newStatus = newStatus,
+                        anilistToken = anilistToken,
+                        tmdbApiKey = apiKey,
+                        tmdbSessionId = tmdbSessionId,
+                        tmdbAccountId = tmdbAccountId
+                    )
+                    launch(Dispatchers.Main) {
+                        Toast.makeText(context, if (synced) "Status updated & synced" else "Status updated", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onOpen = {
+                latestMedia.directWebUrl?.let { url ->
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK })
+                }
+            },
+            onDelete = {
+                selectedMediaForDetail = null
+                scope.launch(Dispatchers.IO) {
+                    repository.removeFromLibrary(
+                        media = latestMedia,
+                        anilistToken = anilistToken,
+                        tmdbApiKey = apiKey,
+                        tmdbSessionId = tmdbSessionId,
+                        tmdbAccountId = tmdbAccountId
+                    )
+                    launch(Dispatchers.Main) {
+                        Toast.makeText(context, "Removed from Library", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
     }
 
     // Dialog asking for status when saving an item from search
@@ -852,19 +933,15 @@ private fun IGTopBar(
 @Composable
 private fun IGPosterCard(
     media: EnrichedMediaEntity,
-    onStatusChange: (String) -> Unit,
-    onOpen: () -> Unit,
-    onDelete: () -> Unit,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     Box(
         modifier = modifier
             .aspectRatio(0.67f)
-            .clip(RoundedCornerShape(0.dp))
+            .clip(RoundedCornerShape(3.dp))
             .background(IGSurface)
-            .clickable { expanded = !expanded }
+            .clickable(onClick = onClick)
     ) {
         if (!media.posterUrl.isNullOrBlank()) {
             AsyncImage(
@@ -875,32 +952,45 @@ private fun IGPosterCard(
             )
         } else {
             Box(Modifier.fillMaxSize().background(IGCard), contentAlignment = Alignment.Center) {
-                Text(media.mediaType.take(1), fontSize = 40.sp, color = IGTextTertiary)
+                Text(media.mediaType.take(1), fontSize = 36.sp, color = IGTextTertiary)
             }
         }
 
-        // Bottom gradient overlay
+        // Bottom gradient overlay with title and rating
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
                 .background(posterGradientOverlay)
-                .padding(8.dp)
+                .padding(horizontal = 6.dp, vertical = 6.dp)
         ) {
             Column {
                 val typeColor = getMediaTypeColor(media.mediaType)
-                Text(media.mediaType.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = typeColor, letterSpacing = 0.5.sp)
-                Text(media.cleanTitle, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = IGTextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    media.mediaType.uppercase(),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = typeColor,
+                    letterSpacing = 0.5.sp
+                )
+                Text(
+                    media.cleanTitle,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = IGTextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 media.rating?.let {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(10.dp))
-                        Text(" ${String.format("%.1f", it)}", fontSize = 10.sp, color = IGYellow)
+                        Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(9.dp))
+                        Text(" ${String.format("%.1f", it)}", fontSize = 9.sp, color = IGYellow)
                     }
                 }
             }
         }
 
-        // Status dot top-right
+        // Status indicator dot at top-right
         Box(
             modifier = Modifier
                 .padding(6.dp)
@@ -909,88 +999,231 @@ private fun IGPosterCard(
                 .background(getStatusColor(media.userStatus))
                 .align(Alignment.TopEnd)
         )
+    }
+}
 
-        // Expanded overlay for status selection
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn(tween(160)),
-            modifier = Modifier.fillMaxSize()
+@Composable
+private fun MediaDetailDialog(
+    media: EnrichedMediaEntity,
+    onDismiss: () -> Unit,
+    onStatusChange: (String) -> Unit,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = IGCard,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp)
         ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.82f))
-                    .padding(12.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.SpaceEvenly,
-                    horizontalAlignment = Alignment.CenterHorizontally
+                // Header with Poster thumbnail, details, and dedicated Dismiss button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    listOf(
-                        "PLANNING" to "Plan to Watch",
-                        "CURRENT" to "Watching",
-                        "COMPLETED" to "Completed",
-                        "DROPPED" to "Dropped"
-                    ).forEach { (code, label) ->
-                        val active = media.userStatus == code
+                    Box(
+                        modifier = Modifier
+                            .size(width = 62.dp, height = 90.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(IGSurface)
+                    ) {
+                        if (!media.posterUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = media.posterUrl,
+                                contentDescription = media.cleanTitle,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(Modifier.fillMaxSize().background(IGCard), contentAlignment = Alignment.Center) {
+                                Text(media.mediaType.take(1), fontSize = 28.sp, color = IGTextTertiary)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        val typeColor = getMediaTypeColor(media.mediaType)
+                        Text(
+                            media.mediaType.uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = typeColor,
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            media.cleanTitle,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = IGTextPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            media.year?.let {
+                                Text("$it", fontSize = 12.sp, color = IGTextSecondary)
+                            }
+                            media.rating?.let {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(11.dp))
+                                    Text(" ${String.format("%.1f", it)}", fontSize = 12.sp, color = IGYellow, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            Text("• ${media.sourceService}", fontSize = 11.sp, color = IGTextTertiary)
+                        }
+                    }
+
+                    // Prominent (X) button to close the menu conveniently without mis-pressing
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = "Close",
+                            tint = IGTextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                media.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        overview,
+                        fontSize = 12.sp,
+                        color = IGTextSecondary,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 16.sp
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "STATUS",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = IGTextTertiary,
+                    letterSpacing = 0.8.sp
+                )
+                Spacer(Modifier.height(8.dp))
+
+                // Convenient status selector rows
+                val statusOptions = listOf(
+                    Triple("CURRENT", "Watching", Color(0xFF4CAF50)),
+                    Triple("PLANNING", "Plan to Watch", Color(0xFF2196F3)),
+                    Triple("COMPLETED", "Completed", Color(0xFF9C27B0)),
+                    Triple("DROPPED", "Dropped", Color(0xFFE91E63))
+                )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    statusOptions.forEach { (code, label, color) ->
+                        val isSelected = media.userStatus == code
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (active) IGTextPrimary.copy(alpha = 0.15f) else Color.Transparent)
-                                .clickable {
-                                    onStatusChange(code)
-                                    expanded = false
-                                }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) color.copy(alpha = 0.18f) else IGBlack.copy(alpha = 0.45f))
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 0.5.dp,
+                                    color = if (isSelected) color else IGDivider,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable { onStatusChange(code) }
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                label,
-                                fontSize = 12.sp,
-                                color = if (active) IGTextPrimary else IGTextSecondary,
-                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                            if (active) Icon(Icons.Default.Check, null, tint = IGGreen, modifier = Modifier.size(14.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    label,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) IGTextPrimary else IGTextSecondary
+                                )
+                            }
+                            if (isSelected) {
+                                Icon(Icons.Default.Check, contentDescription = "Selected", tint = color, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // Action buttons: Open in Web / Remove from Library
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (media.directWebUrl != null) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(IGBlue.copy(alpha = 0.15f))
+                                .border(1.dp, IGBlue.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                                .clickable { onOpen() }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.OpenInNew, null, tint = IGBlue, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Open Web", color = IGBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
 
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(IGRed.copy(alpha = 0.12f))
+                            .border(1.dp, IGRed.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                            .clickable { onDelete() }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(IGBlue.copy(alpha = 0.15f))
-                                .clickable {
-                                    onOpen()
-                                    expanded = false
-                                }
-                                .padding(vertical = 7.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.OpenInNew, null, tint = IGBlue, modifier = Modifier.size(16.dp))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(IGRed.copy(alpha = 0.15f))
-                                .clickable {
-                                    onDelete()
-                                    expanded = false
-                                }
-                                .padding(vertical = 7.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Delete, null, tint = IGRed, modifier = Modifier.size(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Delete, null, tint = IGRed, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Remove", color = IGRed, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
+                }
+
+                Spacer(Modifier.height(6.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Close", color = IGTextSecondary, fontSize = 13.sp)
                 }
             }
         }
