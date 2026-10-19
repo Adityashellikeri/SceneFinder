@@ -99,6 +99,7 @@ import com.scenefinder.ui.theme.IGTextPrimary
 import com.scenefinder.ui.theme.IGTextSecondary
 import com.scenefinder.ui.theme.SceneFinderTheme
 import com.scenefinder.ui.theme.LocalAppThemeColors
+import com.scenefinder.ui.theme.ThemeAmbientOverlay
 import com.scenefinder.ui.theme.getThemeColors
 import com.scenefinder.data.prefs.AppTheme
 import androidx.compose.runtime.collectAsState
@@ -466,6 +467,8 @@ private fun MainAppScaffold(
                 .padding(bottom = paddingValues.calculateBottomPadding())
                 .background(tc.background)
         ) {
+            ThemeAmbientOverlay(modifier = Modifier.matchParentSize())
+
             AnimatedContent(
                 targetState = selectedIndex,
                 transitionSpec = {

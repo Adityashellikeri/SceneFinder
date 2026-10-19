@@ -112,6 +112,14 @@ import com.scenefinder.ui.theme.BrutalTextSecondary
 import com.scenefinder.ui.theme.BrutalYellow
 import com.scenefinder.ui.theme.LocalAppThemeColors
 import com.scenefinder.ui.theme.SceneFinderTheme
+import com.scenefinder.ui.theme.ThemeSearchingIndicator
+import com.scenefinder.ui.theme.ThemeAmbientOverlay
+import com.scenefinder.ui.theme.CyberCornerTechNotches
+import com.scenefinder.ui.theme.JarvisCornerTechBrackets
+import com.scenefinder.ui.theme.CyberpunkYellow
+import com.scenefinder.ui.theme.CyberpunkCyan
+import com.scenefinder.ui.theme.IronManGold
+import com.scenefinder.ui.theme.IronManBlueBright
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -290,6 +298,9 @@ private fun TextSearchPopup(
                         indication = null
                     ) {}
             ) {
+                // Movie & Game HUD Ambient Animation Layer
+                ThemeAmbientOverlay(modifier = Modifier.matchParentSize())
+
                 Column(
                     modifier = Modifier
                         .padding(18.dp)
@@ -322,7 +333,7 @@ private fun TextSearchPopup(
                     ) { s ->
                         when (s) {
                             is SearchState.Idle -> BrutalIdleCard()
-                            is SearchState.Loading -> BrutalSearchingIndicator(s.query)
+                            is SearchState.Loading -> ThemeSearchingIndicator(s.query)
                             is SearchState.Found -> BrutalResultCard(
                                 media = s.selected,
                                 allResults = s.allResults,
@@ -659,50 +670,7 @@ private fun BrutalIdleCard() {
 
 @Composable
 private fun BrutalSearchingIndicator(query: String) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "alpha"
-    )
-    BrutalCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        backgroundColor = BrutalCard,
-        borderColor = BrutalCyan
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth().padding(22.dp)
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(36.dp),
-                color = BrutalYellow,
-                strokeWidth = 3.5.dp
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                text = "SCANNING REPOSITORIES...",
-                color = BrutalCyan,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.6.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "\"$query\"",
-                color = BrutalTextPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
+    ThemeSearchingIndicator(query = query)
 }
 
 /**
@@ -719,6 +687,7 @@ private fun BrutalResultCard(
     onOpenWeb: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val tc = LocalAppThemeColors.current
     val typeColor = when (media.mediaType.uppercase()) {
         "ANIME" -> BrutalPurple
         "MANGA", "MANHWA" -> BrutalLime
@@ -731,11 +700,44 @@ private fun BrutalResultCard(
         else -> BrutalYellow
     }
 
+    val hudBanner = when {
+        tc.isCyberpunk -> "[ RECON.LOCKED // TARGET IDENTIFIED ]"
+        tc.isIronMan   -> "MARK-85 HUD: TARGET LOCK ACQUIRED"
+        else           -> null
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
     ) {
+        // Sci-Fi / Game HUD banner if in Cyberpunk or Iron Man mode
+        if (hudBanner != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = hudBanner,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = if (tc.isCyberpunk) CyberpunkYellow else IronManGold,
+                    letterSpacing = 0.8.sp
+                )
+                Text(
+                    text = if (tc.isCyberpunk) "SIGNAL 100%" else "FRIDAY: VERIFIED",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (tc.isCyberpunk) CyberpunkCyan else IronManBlueBright
+                )
+            }
+        }
+
         // Main Media Display
         Row(
             modifier = Modifier.fillMaxWidth(),
