@@ -21,8 +21,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import com.scenefinder.data.prefs.AppTheme
+import android.media.ToneGenerator
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -1006,8 +1013,8 @@ fun MinimalOrbitalSearching(
 
 /**
  * Ambient overlay applied to cards or screens that injects cinematic atmosphere:
- * - Cyberpunk: Scanlines, cathode CRT sweep, tech corner notches
- * - Iron Man: Holographic corner brackets & laser scan line
+ * - Cyberpunk: Scanlines, cathode CRT sweep, tech corner notches, hex matrix background
+ * - Iron Man: Holographic Arc Reactor watermark, blueprint grid, corner brackets & laser scan line
  * - Brutalism / Dark Minimal: Subtle crisp accents
  */
 @Composable
@@ -1018,10 +1025,14 @@ fun ThemeAmbientOverlay(
     when {
         tc.isCyberpunk -> {
             Box(modifier = modifier.fillMaxSize()) {
+                // Background cybernetic grid & floating hex stream
+                CyberpunkBackgroundGrid(modifier = Modifier.matchParentSize())
+                CyberpunkBackgroundHexStream(modifier = Modifier.matchParentSize())
+                // Phosphor scanlines
                 CyberpunkScanlines(
                     modifier = Modifier.matchParentSize(),
-                    scanlineColor = CyberpunkCyan.copy(alpha = 0.04f),
-                    sweepColor = CyberpunkYellow.copy(alpha = 0.07f)
+                    scanlineColor = CyberpunkCyan.copy(alpha = 0.05f),
+                    sweepColor = CyberpunkYellow.copy(alpha = 0.08f)
                 )
                 CyberCornerTechNotches(
                     modifier = Modifier.matchParentSize(),
@@ -1031,9 +1042,14 @@ fun ThemeAmbientOverlay(
         }
         tc.isIronMan -> {
             Box(modifier = modifier.fillMaxSize()) {
+                // Holographic HUD blueprint grid
+                JarvisBackgroundGrid(modifier = Modifier.matchParentSize())
+                // Rotating holographic Arc Reactor watermark
+                JarvisBackgroundArcReactorWatermark(modifier = Modifier.matchParentSize())
+                // Sweeping laser scan beam
                 JarvisHoloSweep(
                     modifier = Modifier.matchParentSize(),
-                    laserColor = IronManBlueBright.copy(alpha = 0.08f)
+                    laserColor = IronManBlueBright.copy(alpha = 0.10f)
                 )
                 JarvisCornerTechBrackets(
                     modifier = Modifier.matchParentSize(),
@@ -1042,8 +1058,14 @@ fun ThemeAmbientOverlay(
                 )
             }
         }
+        tc.isBrutalist -> {
+            Box(modifier = modifier.fillMaxSize()) {
+                BrutalBackgroundGrid(modifier = Modifier.matchParentSize())
+            }
+        }
         else -> {
-            // No intrusive overlay for standard themes
+            // Dark Minimal subtle radial breathing glow
+            MinimalBreathingBackground(modifier = modifier)
         }
     }
 }
@@ -1165,3 +1187,514 @@ fun GlitchDecipherText(
         modifier = modifier
     )
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMMERSIVE THEME BACKGROUND WATERMARKS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Large rotating Arc Reactor holographic watermark in the background for Iron Man theme.
+ */
+@Composable
+fun JarvisBackgroundArcReactorWatermark(
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "jarvis_bg_arc")
+    val rotClockwise by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(22000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "bg_rot_cw"
+    )
+    val rotCounter by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(15000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "bg_rot_ccw"
+    )
+    val corePulse by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bg_pulse"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val center = Offset(size.width * 0.82f, size.height * 0.35f)
+        val maxR = size.minDimension * 0.65f
+
+        // Outer concentric HUD circle
+        drawCircle(
+            color = IronManGold.copy(alpha = 0.09f),
+            radius = maxR,
+            center = center,
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+
+        // Clockwise segmented arcs
+        rotate(rotClockwise, center) {
+            val arcR = maxR * 0.82f
+            for (i in 0..2) {
+                drawArc(
+                    color = IronManBlueBright.copy(alpha = 0.12f),
+                    startAngle = i * 120f + 10f,
+                    sweepAngle = 85f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - arcR, center.y - arcR),
+                    size = Size(arcR * 2, arcR * 2),
+                    style = Stroke(width = 3.dp.toPx())
+                )
+            }
+        }
+
+        // Counter-clockwise gear tooth telemetry ring
+        rotate(rotCounter, center) {
+            val innerR = maxR * 0.58f
+            drawCircle(
+                color = IronManGold.copy(alpha = 0.08f),
+                radius = innerR,
+                center = center,
+                style = Stroke(width = 1.dp.toPx())
+            )
+            for (t in 0..11) {
+                val rad = t * (PI / 6).toFloat()
+                val p1 = Offset(center.x + innerR * 0.85f * cos(rad), center.y + innerR * 0.85f * sin(rad))
+                val p2 = Offset(center.x + innerR * cos(rad), center.y + innerR * sin(rad))
+                drawLine(
+                    color = IronManGold.copy(alpha = 0.12f),
+                    start = p1,
+                    end = p2,
+                    strokeWidth = 1.5.dp.toPx()
+                )
+            }
+        }
+
+        // Central glowing Unibeam core
+        val coreR = 24.dp.toPx() * corePulse
+        drawCircle(
+            color = IronManBlueBright.copy(alpha = 0.08f),
+            radius = coreR * 2.2f,
+            center = center
+        )
+        drawCircle(
+            color = IronManBlueBright.copy(alpha = 0.18f),
+            radius = coreR,
+            center = center
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.25f),
+            radius = coreR * 0.45f,
+            center = center
+        )
+    }
+}
+
+/**
+ * Stark HUD blueprint grid lines and coordinate readouts.
+ */
+@Composable
+fun JarvisBackgroundGrid(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val gridColor = IronManGold.copy(alpha = 0.04f)
+        val step = 48.dp.toPx()
+
+        var x = 0f
+        while (x < size.width) {
+            drawLine(color = gridColor, start = Offset(x, 0f), end = Offset(x, size.height), strokeWidth = 1f)
+            x += step
+        }
+        var y = 0f
+        while (y < size.height) {
+            drawLine(color = gridColor, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1f)
+            y += step
+        }
+    }
+}
+
+/**
+ * Cyberpunk background grid lines.
+ */
+@Composable
+fun CyberpunkBackgroundGrid(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val gridColor = CyberpunkCyan.copy(alpha = 0.04f)
+        val step = 44.dp.toPx()
+
+        var x = 0f
+        while (x < size.width) {
+            drawLine(color = gridColor, start = Offset(x, 0f), end = Offset(x, size.height), strokeWidth = 1f)
+            x += step
+        }
+        var y = 0f
+        while (y < size.height) {
+            drawLine(color = gridColor, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1f)
+            y += step
+        }
+    }
+}
+
+/**
+ * Faint drifting Netrunner hex code stream in background for Cyberpunk theme.
+ */
+@Composable
+fun CyberpunkBackgroundHexStream(modifier: Modifier = Modifier) {
+    var hexLines by remember {
+        mutableStateOf(
+            listOf(
+                "0x1C  0x55  0xBD  0xE9  0x7A  0xFF",
+                "0x3B  0xD4  0x0A  0x88  0xC1  0x9E",
+                "0x77  0x01  0xFA  0x2E  0x6D  0x11",
+                "0x88  0xB2  0x04  0xF9  0xAA  0x55"
+            )
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        val hexPool = listOf("1C", "55", "BD", "E9", "7A", "FF", "3B", "D4", "0A", "88", "C1", "9E", "77", "42")
+        while (true) {
+            delay(1200)
+            hexLines = (0..3).map {
+                (0..5).joinToString("  ") { "0x" + hexPool[Random.nextInt(hexPool.size)] }
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(start = 24.dp, top = 80.dp),
+        verticalArrangement = Arrangement.spacedBy(40.dp)
+    ) {
+        hexLines.forEach { line ->
+            Text(
+                text = line,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = CyberpunkCyan.copy(alpha = 0.06f),
+                letterSpacing = 2.sp
+            )
+        }
+    }
+}
+
+/**
+ * Neo-Brutalist geometric dot grid background.
+ */
+@Composable
+fun BrutalBackgroundGrid(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val dotColor = BrutalYellow.copy(alpha = 0.06f)
+        val step = 32.dp.toPx()
+        val radius = 1.5.dp.toPx()
+
+        var x = step / 2
+        while (x < size.width) {
+            var y = step / 2
+            while (y < size.height) {
+                drawCircle(color = dotColor, radius = radius, center = Offset(x, y))
+                y += step
+            }
+            x += step
+        }
+    }
+}
+
+/**
+ * Dark Minimal ambient breathing gradient.
+ */
+@Composable
+fun MinimalBreathingBackground(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "minimal_bg")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.03f,
+        targetValue = 0.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "min_alpha"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val brush = Brush.radialGradient(
+            colors = listOf(
+                Color(0xFF6C63FF).copy(alpha = glowAlpha),
+                Color.Transparent
+            ),
+            center = Offset(size.width / 2, size.height * 0.4f),
+            radius = size.minDimension * 0.8f
+        )
+        drawRect(brush = brush)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THEME STARTUP INTRO (App Opening Arc Reactor / Cyberpunk Boot Sequence)
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun ThemeStartupIntro(
+    theme: AppTheme,
+    onFinished: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onFinished
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        when (theme) {
+            AppTheme.IRON_MAN -> IronManStartupSequence(onFinished = onFinished)
+            AppTheme.CYBERPUNK_2077 -> CyberpunkStartupSequence(onFinished = onFinished)
+            AppTheme.NEO_BRUTALISM -> BrutalStartupSequence(onFinished = onFinished)
+            AppTheme.DARK_MINIMAL -> LaunchedEffect(Unit) { onFinished() }
+        }
+    }
+}
+
+/**
+ * Iron Man Arc Reactor App Opening Startup Sequence.
+ */
+@Composable
+private fun IronManStartupSequence(onFinished: () -> Unit) {
+    val context = LocalContext.current
+    var telemetryStage by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        SciFiSoundFx.playTone(ToneGenerator.TONE_PROP_PROMPT, 200)
+        SciFiSoundFx.vibrate(context, longArrayOf(0, 80, 40, 120))
+        delay(600)
+        telemetryStage = 1
+        delay(700)
+        telemetryStage = 2
+        delay(900)
+        onFinished()
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "arc_startup")
+    val rotationAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "startup_rot"
+    )
+    val coreGlow by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "startup_glow"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(24.dp)
+    ) {
+        // Holographic Arc Reactor
+        Box(
+            modifier = Modifier.size(160.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(160.dp)) {
+                val center = Offset(size.width / 2, size.height / 2)
+                val maxR = size.minDimension / 2 - 8.dp.toPx()
+
+                // Outer targeting telemetry ring
+                drawCircle(
+                    color = IronManGold,
+                    radius = maxR,
+                    style = Stroke(width = 2.dp.toPx())
+                )
+
+                // 4 cardinal target brackets
+                val bLen = 14.dp.toPx()
+                drawLine(color = IronManGold, start = Offset(center.x - maxR, center.y), end = Offset(center.x - maxR + bLen, center.y), strokeWidth = 3.dp.toPx())
+                drawLine(color = IronManGold, start = Offset(center.x + maxR - bLen, center.y), end = Offset(center.x + maxR, center.y), strokeWidth = 3.dp.toPx())
+                drawLine(color = IronManGold, start = Offset(center.x, center.y - maxR), end = Offset(center.x, center.y - maxR + bLen), strokeWidth = 3.dp.toPx())
+                drawLine(color = IronManGold, start = Offset(center.x, center.y + maxR - bLen), end = Offset(center.x, center.y + maxR), strokeWidth = 3.dp.toPx())
+
+                // Rotating segmented Arc segments
+                rotate(rotationAngle, center) {
+                    val midR = maxR * 0.78f
+                    for (k in 0..2) {
+                        drawArc(
+                            color = IronManBlueBright,
+                            startAngle = k * 120f + 10f,
+                            sweepAngle = 90f,
+                            useCenter = false,
+                            style = Stroke(width = 4.dp.toPx())
+                        )
+                    }
+                }
+
+                // Inner gear teeth counter-rotating
+                rotate(-rotationAngle * 1.5f, center) {
+                    val innerR = maxR * 0.54f
+                    drawCircle(color = IronManGoldBright, radius = innerR, style = Stroke(width = 1.5.dp.toPx()))
+                    for (t in 0..11) {
+                        val rad = t * (PI / 6).toFloat()
+                        val t1 = Offset(center.x + innerR * 0.8f * cos(rad), center.y + innerR * 0.8f * sin(rad))
+                        val t2 = Offset(center.x + innerR * cos(rad), center.y + innerR * sin(rad))
+                        drawLine(color = IronManGoldBright, start = t1, end = t2, strokeWidth = 2.dp.toPx())
+                    }
+                }
+
+                // Central pulsing Unibeam core
+                val coreR = 18.dp.toPx() * coreGlow
+                drawCircle(
+                    color = IronManBlueBright.copy(alpha = 0.35f),
+                    radius = coreR * 1.8f,
+                    center = center
+                )
+                drawCircle(
+                    color = IronManBlueBright,
+                    radius = coreR,
+                    center = center
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = coreR * 0.5f,
+                    center = center
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "STARK INDUSTRIES // MARK-85",
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Black,
+            color = IronManGold,
+            letterSpacing = 1.5.sp
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = when (telemetryStage) {
+                0 -> "INITIALIZING ARC REACTOR..."
+                1 -> "ARC CORE: 100% ONLINE • SYSTEMS NOMINAL"
+                else -> "“WELCOME BACK, SIR. READY FOR ACTION.”"
+            },
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = IronManBlueBright,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        Text(
+            text = "TAP TO SKIP",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF666677),
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+/**
+ * Cyberpunk 2077 Kiroshi Optics Boot Sequence.
+ */
+@Composable
+private fun CyberpunkStartupSequence(onFinished: () -> Unit) {
+    val context = LocalContext.current
+    var bootStage by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        SciFiSoundFx.playTone(ToneGenerator.TONE_CDMA_HIGH_L, 160)
+        SciFiSoundFx.vibrate(context, longArrayOf(0, 50, 50, 100))
+        delay(600)
+        bootStage = 1
+        delay(700)
+        bootStage = 2
+        delay(900)
+        onFinished()
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CyberpunkScanlines(modifier = Modifier.matchParentSize())
+        CyberCornerTechNotches(modifier = Modifier.matchParentSize(), color = CyberpunkYellow)
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text(text = "0x77", fontFamily = FontFamily.Monospace, fontSize = 48.sp, fontWeight = FontWeight.Black, color = CyberpunkYellow)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "KIROSHI OPTICS // CYBERWARE v2.077",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                color = CyberpunkCyan,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = when (bootStage) {
+                    0 -> "NEURAL LINK CONNECTING..."
+                    1 -> "OPTIC SYNC: COMPLETE • LATENCY 0.2ms"
+                    else -> "“WAKE UP, SAMURAI. WE HAVE A CITY TO BURN.”"
+                },
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (bootStage == 2) CyberpunkRed else CyberpunkYellow,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(text = "TAP TO SKIP", fontSize = 10.sp, color = Color(0xFF666677))
+        }
+    }
+}
+
+/**
+ * Neo-Brutalism Kinetic Slam Startup.
+ */
+@Composable
+private fun BrutalStartupSequence(onFinished: () -> Unit) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        SciFiSoundFx.playTone(ToneGenerator.TONE_PROP_PROMPT, 120)
+        SciFiSoundFx.vibrate(context, longArrayOf(0, 70))
+        delay(1600)
+        onFinished()
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(24.dp)
+    ) {
+        BrutalBadge(text = "⚡ SCENEFINDER", backgroundColor = BrutalYellow, textColor = Color.Black, fontSize = 22.sp)
+        Spacer(modifier = Modifier.height(14.dp))
+        BrutalHazardTape(tapeHeight = 22.dp, stripeColor = BrutalCyan, backgroundColor = BrutalBlack, text = "/// MAXIMUM OVERDRIVE /// BOOTING SYSTEM ///")
+        Spacer(modifier = Modifier.height(18.dp))
+        Text(text = "TAP TO SKIP", fontSize = 10.sp, color = Color(0xFF666677))
+    }
+}
+

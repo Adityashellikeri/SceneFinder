@@ -100,8 +100,14 @@ import com.scenefinder.ui.theme.IGTextSecondary
 import com.scenefinder.ui.theme.SceneFinderTheme
 import com.scenefinder.ui.theme.LocalAppThemeColors
 import com.scenefinder.ui.theme.ThemeAmbientOverlay
+import com.scenefinder.ui.theme.ThemeStartupIntro
 import com.scenefinder.ui.theme.getThemeColors
 import com.scenefinder.data.prefs.AppTheme
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.collectAsState
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -148,14 +154,29 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val currentTheme by settings.theme.collectAsState()
+            var showStartupIntro by remember { mutableStateOf(true) }
+
             SceneFinderTheme(theme = currentTheme) {
-                MainAppScaffold(
-                    sessionManager = sessionManager,
-                    launcher = launcher,
-                    dao = dao,
-                    repository = repository,
-                    settings = settings
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    MainAppScaffold(
+                        sessionManager = sessionManager,
+                        launcher = launcher,
+                        dao = dao,
+                        repository = repository,
+                        settings = settings
+                    )
+
+                    AnimatedVisibility(
+                        visible = showStartupIntro,
+                        enter = fadeIn(),
+                        exit = fadeOut(tween(400))
+                    ) {
+                        ThemeStartupIntro(
+                            theme = currentTheme,
+                            onFinished = { showStartupIntro = false }
+                        )
+                    }
+                }
             }
         }
     }
