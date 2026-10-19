@@ -52,8 +52,6 @@ import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,14 +69,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -94,13 +91,26 @@ import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.domain.model.MediaType
 import com.scenefinder.domain.parser.CandidateExtractor
 import com.scenefinder.ui.components.AgeRatingBadge
-import com.scenefinder.ui.theme.DarkSurface
-import com.scenefinder.ui.theme.DarkSurfaceVariant
-import com.scenefinder.ui.theme.NeonAccent
-import com.scenefinder.ui.theme.NeonGreen
-import com.scenefinder.ui.theme.NeonOrange
+import com.scenefinder.ui.components.BrutalBadge
+import com.scenefinder.ui.components.BrutalButton
+import com.scenefinder.ui.components.BrutalCard
+import com.scenefinder.ui.components.brutalShadow
+import com.scenefinder.ui.theme.BrutalBlack
+import com.scenefinder.ui.theme.BrutalBorder
+import com.scenefinder.ui.theme.BrutalBorderMuted
+import com.scenefinder.ui.theme.BrutalCard
+import com.scenefinder.ui.theme.BrutalCardElevated
+import com.scenefinder.ui.theme.BrutalCyan
+import com.scenefinder.ui.theme.BrutalDarkBg
+import com.scenefinder.ui.theme.BrutalLime
+import com.scenefinder.ui.theme.BrutalOrange
+import com.scenefinder.ui.theme.BrutalPink
+import com.scenefinder.ui.theme.BrutalPurple
+import com.scenefinder.ui.theme.BrutalTextInverse
+import com.scenefinder.ui.theme.BrutalTextPrimary
+import com.scenefinder.ui.theme.BrutalTextSecondary
+import com.scenefinder.ui.theme.BrutalYellow
 import com.scenefinder.ui.theme.SceneFinderTheme
-import com.scenefinder.ui.theme.TextSecondary
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -108,21 +118,14 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * Merged SceneFinder search & detail popup.
+ * Neo-Brutalist SceneFinder search & detail popup.
  *
- * Triggered from:
- * 1) Android text selection menu (ACTION_PROCESS_TEXT)
- * 2) Direct Share sheet (ACTION_SEND)
- * 3) Quick search / Accessibility overlay
- *
- * Features:
- * - Pre-filled, live-editable search bar with the selected text
- * - One-click re-search right inside the popup
- * - Multi-format search: searches Anime, Manga, TV Shows, and Movies concurrently!
- * - Displays related adaptations (e.g. Manga and Netflix TV show for "One Piece")
- * - One-tap switching between related formats
- * - Built-in Watchlist / Library management (Watching, Plan to Watch, Completed, Dropped)
- * - Direct external web links (AniList / TMDB)
+ * Aesthetics:
+ * - Thick, high-contrast borders
+ * - Crisp 0-blur offset drop shadows
+ * - Saturated electric primary colors (Canary Yellow, Cyber Cyan, Acid Lime, Punchy Pink)
+ * - Tactile buttons that press into their shadows
+ * - Raw, bold typography
  */
 @AndroidEntryPoint
 class TextSearchActivity : ComponentActivity() {
@@ -210,7 +213,7 @@ private fun TextSearchPopup(
     var showStatusDialog by remember { mutableStateOf(false) }
     var currentMediaForStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
 
-    // Execute search across Anime, Manga, TV shows, and Movies
+    // Execute multi-format search
     LaunchedEffect(activeQuery) {
         val q = activeQuery.trim()
         if (q.isBlank()) {
@@ -250,7 +253,7 @@ private fun TextSearchPopup(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.65f))
+            .background(Color.Black.copy(alpha = 0.75f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -269,17 +272,15 @@ private fun TextSearchPopup(
                 )
             ) + fadeIn()
         ) {
+            // Main Neo-Brutalist Bottom Card
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 14.dp, vertical = 20.dp)
+                    .padding(horizontal = 12.dp, vertical = 18.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color(0xFF1E1E34), Color(0xFF141728))
-                        )
-                    )
-                    .border(1.dp, Color(0xFF333A56), RoundedCornerShape(26.dp))
+                    .brutalShadow(offset = 6.dp, color = BrutalBlack, cornerRadius = 16.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BrutalDarkBg)
+                    .border(2.5.dp, BrutalYellow, RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -290,13 +291,13 @@ private fun TextSearchPopup(
                         .padding(18.dp)
                         .heightIn(max = 640.dp)
                 ) {
-                    // Header Row
-                    PopupHeader(onDismiss = onDismiss)
+                    // Brutal Header
+                    BrutalPopupHeader(onDismiss = onDismiss)
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Editable Search Bar with Selected Text
-                    SearchBar(
+                    // Brutal Search Bar with Pre-filled Text
+                    BrutalSearchBar(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
                         onSearch = {
@@ -309,16 +310,16 @@ private fun TextSearchPopup(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Content Area (Loading, Results, Not Found, Error)
+                    // Dynamic State Container
                     AnimatedContent(
                         targetState = state,
-                        transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(180)) },
+                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
                         label = "search_state"
                     ) { s ->
                         when (s) {
-                            is SearchState.Idle -> IdleCard()
-                            is SearchState.Loading -> SearchingIndicator(s.query)
-                            is SearchState.Found -> MergedResultCard(
+                            is SearchState.Idle -> BrutalIdleCard()
+                            is SearchState.Loading -> BrutalSearchingIndicator(s.query)
+                            is SearchState.Found -> BrutalResultCard(
                                 media = s.selected,
                                 allResults = s.allResults,
                                 isSaved = isSaved,
@@ -358,61 +359,64 @@ private fun TextSearchPopup(
                                 },
                                 onDismiss = onDismiss
                             )
-                            is SearchState.NotFound -> NotFoundCard(
+                            is SearchState.NotFound -> BrutalNotFoundCard(
                                 query = s.query,
                                 onRetryWithQuery = { newQ ->
                                     searchQuery = newQ
                                     activeQuery = newQ
                                 }
                             )
-                            is SearchState.Error -> ErrorCard(s.message)
+                            is SearchState.Error -> BrutalErrorCard(s.message)
                         }
                     }
                 }
             }
         }
 
-        // Watchlist Status Picker Dialog
+        // Neo-Brutalist Watchlist Status Dialog
         if (showStatusDialog && currentMediaForStatus != null) {
             val media = currentMediaForStatus!!
             Dialog(onDismissRequest = { showStatusDialog = false }) {
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = DarkSurface,
-                    tonalElevation = 6.dp,
+                    shape = RoundedCornerShape(14.dp),
+                    color = BrutalCard,
+                    border = androidx.compose.foundation.BorderStroke(2.5.dp, BrutalYellow),
+                    shadowElevation = 16.dp,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "Add to Watchlist",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                        BrutalBadge(
+                            text = "STATUS PICKER",
+                            backgroundColor = BrutalYellow,
+                            fontSize = 11.sp
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(10.dp))
                         Text(
                             text = media.cleanTitle,
-                            fontSize = 13.sp,
-                            color = TextSecondary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Black,
+                            color = BrutalTextPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(Modifier.height(16.dp))
 
                         listOf(
-                            Triple("CURRENT", "Watching", "Currently watching / reading"),
-                            Triple("PLANNING", "Plan to Watch", "Save to watch later"),
-                            Triple("COMPLETED", "Completed", "Finished watching"),
-                            Triple("DROPPED", "Dropped", "Stopped watching")
-                        ).forEach { (code, title, desc) ->
-                            Row(
+                            Triple("CURRENT", "WATCHING", BrutalCyan),
+                            Triple("PLANNING", "PLAN TO WATCH", BrutalYellow),
+                            Triple("COMPLETED", "COMPLETED", BrutalLime),
+                            Triple("DROPPED", "DROPPED", BrutalPink)
+                        ).forEach { (code, title, color) ->
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.Black.copy(alpha = 0.5f))
+                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(color)
+                                    .border(2.dp, BrutalBlack, RoundedCornerShape(8.dp))
                                     .clickable {
                                         showStatusDialog = false
                                         scope.launch {
@@ -430,49 +434,32 @@ private fun TextSearchPopup(
                                                 )
                                             }
                                             isSaved = true
-                                            val statusLabel = when (code) {
-                                                "CURRENT" -> "Watching"
-                                                "COMPLETED" -> "Completed"
-                                                "DROPPED" -> "Dropped"
-                                                else -> "Plan to Watch"
-                                            }
                                             val isAnime = toSave.mediaType.equals("Anime", ignoreCase = true) ||
                                                     toSave.mediaType.equals("Manga", ignoreCase = true)
                                             val target = if (isAnime) "AniList" else "TMDB"
-                                            val msg = if (synced) "Saved as $statusLabel & synced to $target!" else "Saved as $statusLabel"
+                                            val msg = if (synced) "Saved as $title & synced to $target!" else "Saved as $title"
                                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                         }
                                     }
-                                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                val dotColor = when (code) {
-                                    "CURRENT" -> Color(0xFF0095F6)
-                                    "PLANNING" -> Color(0xFFA855F7)
-                                    "COMPLETED" -> Color(0xFF10B981)
-                                    else -> Color(0xFFEF4444)
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(dotColor)
+                                Text(
+                                    text = title,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = BrutalBlack,
+                                    letterSpacing = 0.5.sp
                                 )
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                                    Text(desc, fontSize = 11.sp, color = TextSecondary)
-                                }
                             }
-                            Spacer(Modifier.height(8.dp))
                         }
 
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(8.dp))
                         TextButton(
                             onClick = { showStatusDialog = false },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Cancel", color = TextSecondary)
+                            Text("CANCEL", color = BrutalTextSecondary, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -482,11 +469,11 @@ private fun TextSearchPopup(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Search Bar Component
+// Neo-Brutalist Search Bar
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SearchBar(
+private fun BrutalSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit
@@ -494,36 +481,38 @@ private fun SearchBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF262940))
-            .border(1.dp, Color(0xFF3F4668), RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .brutalShadow(offset = 3.dp, color = BrutalBlack, cornerRadius = 10.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(BrutalCard)
+            .border(2.dp, BrutalBorder, RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = Icons.Default.Search,
             contentDescription = "Search",
-            tint = NeonAccent,
+            tint = BrutalYellow,
             modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
         Box(modifier = Modifier.weight(1f)) {
             if (query.isEmpty()) {
                 Text(
-                    text = "Search media title...",
-                    color = Color(0xFF7A82A6),
-                    fontSize = 14.sp
+                    text = "SEARCH ANY TITLE...",
+                    color = BrutalTextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
             BasicTextField(
                 value = query,
                 onValueChange = onQueryChange,
                 textStyle = TextStyle(
-                    color = Color.White,
+                    color = BrutalTextPrimary,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold
                 ),
-                cursorBrush = SolidColor(NeonAccent),
+                cursorBrush = SolidColor(BrutalYellow),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onSearch() }),
@@ -533,175 +522,169 @@ private fun SearchBar(
         if (query.isNotEmpty()) {
             IconButton(
                 onClick = { onQueryChange("") },
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(26.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Clear",
-                    tint = Color(0xFFAAAAAA),
-                    modifier = Modifier.size(16.dp)
+                    tint = BrutalPink,
+                    modifier = Modifier.size(17.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(6.dp))
         }
+        // Bold yellow action block
         Box(
             modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(NeonAccent)
+                .size(32.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(BrutalYellow)
+                .border(1.5.dp, BrutalBlack, RoundedCornerShape(6.dp))
                 .clickable { onSearch() },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = "Run Search",
-                tint = Color.Black,
-                modifier = Modifier.size(16.dp)
+                tint = BrutalBlack,
+                modifier = Modifier.size(17.dp)
             )
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-composables
+// Neo-Brutalist Sub-composables
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PopupHeader(onDismiss: () -> Unit) {
+private fun BrutalPopupHeader(onDismiss: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(Color(0xFFFF6B35), Color(0xFFDD2A7B))
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(17.dp)
-                )
-            }
+            BrutalBadge(
+                text = "SCENEFINDER",
+                backgroundColor = BrutalYellow,
+                fontSize = 11.sp
+            )
             Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = "SceneFinder",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = Color.White
-                )
-                Text(
-                    text = "Anime · Manga · Movies · TV",
-                    fontSize = 11.sp,
-                    color = Color(0xFF8E95B8)
-                )
-            }
+            Text(
+                text = "NEO-MEDIA DETECT",
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Black,
+                fontSize = 11.sp,
+                color = BrutalCyan,
+                letterSpacing = 0.6.sp
+            )
         }
-        IconButton(
-            onClick = onDismiss,
-            modifier = Modifier.size(32.dp)
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(BrutalCardElevated)
+                .border(1.5.dp, BrutalBorder, RoundedCornerShape(6.dp))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Close",
-                tint = Color(0xFF8E95B8)
+                tint = BrutalTextPrimary,
+                modifier = Modifier.size(15.dp)
             )
         }
     }
 }
 
 @Composable
-private fun IdleCard() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+private fun BrutalIdleCard() {
+    BrutalCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 24.dp)
+            .padding(vertical = 14.dp),
+        backgroundColor = BrutalCard,
+        borderColor = BrutalBorder
     ) {
-        Text(text = "🎬", fontSize = 36.sp)
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Type any title to search",
-            color = Color.White,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Search across AniList, TMDB, MangaDex & more",
-            color = Color(0xFF888888),
-            fontSize = 12.sp
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().padding(22.dp)
+        ) {
+            Text(text = "⚡", fontSize = 36.sp)
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "TYPE OR SELECT ANY TITLE",
+                color = BrutalYellow,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Black
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "AniList • TMDB • MangaDex Universal Lookup",
+                color = BrutalTextSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 
 @Composable
-private fun SearchingIndicator(query: String) {
+private fun BrutalSearchingIndicator(query: String) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
+        initialValue = 0.5f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
+            animation = tween(600, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
     )
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    BrutalCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 24.dp)
+            .padding(vertical = 12.dp),
+        backgroundColor = BrutalCard,
+        borderColor = BrutalCyan
     ) {
-        Box(
-            modifier = Modifier
-                .size(60.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF262D4A).copy(alpha = alpha)),
-            contentAlignment = Alignment.Center
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().padding(22.dp)
         ) {
             CircularProgressIndicator(
-                modifier = Modifier.size(30.dp),
-                color = NeonAccent,
-                strokeWidth = 3.dp
+                modifier = Modifier.size(36.dp),
+                color = BrutalYellow,
+                strokeWidth = 3.5.dp
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = "SCANNING REPOSITORIES...",
+                color = BrutalCyan,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.6.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "\"$query\"",
+                color = BrutalTextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
             )
         }
-        Spacer(modifier = Modifier.height(14.dp))
-        Text(text = "Searching for", color = Color(0xFF888888), fontSize = 12.sp)
-        Text(
-            text = "\"$query\"",
-            color = Color.White,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = "Checking AniList · TMDB · MangaDex…",
-            color = Color(0xFF707798),
-            fontSize = 11.sp,
-            fontStyle = FontStyle.Italic
-        )
     }
 }
 
 /**
- * Fully merged result card with complete details and action buttons directly integrated,
- * plus a list of related formats & adaptations (Manga, TV Show, Movies).
+ * Fully Neo-Brutalist Result Card with hard shadows, punchy tags, tactile buttons,
+ * and related adaptations block.
  */
 @Composable
-private fun MergedResultCard(
+private fun BrutalResultCard(
     media: EnrichedMediaEntity,
     allResults: List<EnrichedMediaEntity>,
     isSaved: Boolean,
@@ -711,15 +694,15 @@ private fun MergedResultCard(
     onDismiss: () -> Unit
 ) {
     val typeColor = when (media.mediaType.uppercase()) {
-        "ANIME" -> Color(0xFF9C27B0)
-        "MANGA", "MANHWA" -> Color(0xFF4CAF50)
-        "MOVIE" -> Color(0xFF2196F3)
+        "ANIME" -> BrutalPurple
+        "MANGA", "MANHWA" -> BrutalLime
+        "MOVIE" -> BrutalCyan
         MediaType.TV_SERIES.name,
         MediaType.TV_SHOWS.name,
         MediaType.WEB_SERIES.name,
         "TV SHOWS",
-        "TV" -> Color(0xFFFF9800)
-        else -> NeonAccent
+        "TV" -> BrutalOrange
+        else -> BrutalYellow
     }
 
     Column(
@@ -727,94 +710,85 @@ private fun MergedResultCard(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
     ) {
-        // Top section: Poster + Primary Details
+        // Main Media Display
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Poster with hard border & shadow
             if (!media.posterUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = media.posterUrl,
-                    contentDescription = media.cleanTitle,
+                Box(
                     modifier = Modifier
-                        .width(88.dp)
-                        .height(126.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                        .brutalShadow(offset = 4.dp, color = BrutalBlack, cornerRadius = 10.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(2.dp, BrutalBorder, RoundedCornerShape(10.dp))
+                ) {
+                    AsyncImage(
+                        model = media.posterUrl,
+                        contentDescription = media.cleanTitle,
+                        modifier = Modifier
+                            .width(90.dp)
+                            .height(130.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                }
             } else {
                 Box(
                     modifier = Modifier
-                        .width(88.dp)
-                        .height(126.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF2A2A4A)),
+                        .width(90.dp)
+                        .height(130.dp)
+                        .brutalShadow(offset = 4.dp, color = BrutalBlack, cornerRadius = 10.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(BrutalCardElevated)
+                        .border(2.dp, BrutalBorder, RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = media.mediaType.take(2).uppercase(),
                         color = typeColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
+                        fontWeight = FontWeight.Black,
+                        fontSize = 24.sp
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                // Badges row: Media Type + Age Rating + Score
+                // Badges row: Type Tag + Age Rating + Score Tag
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(typeColor.copy(alpha = 0.20f))
-                            .padding(horizontal = 7.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = media.mediaType,
-                            color = typeColor,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    BrutalBadge(
+                        text = media.mediaType,
+                        backgroundColor = typeColor,
+                        textColor = BrutalBlack
+                    )
 
                     media.ageRating?.let { age ->
-                        AgeRatingBadge(rating = age, fontSize = 9.sp)
+                        AgeRatingBadge(rating = age)
                     }
 
                     // Score (properly scaled to 10 max)
                     media.rating?.let { rawRating ->
                         val displayScore = if (rawRating > 10f) rawRating / 10f else rawRating
                         if (displayScore > 0f) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = "Rating",
-                                    tint = NeonOrange,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = String.format("%.1f", displayScore),
-                                    fontSize = 11.sp,
-                                    color = NeonOrange,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            BrutalBadge(
+                                text = "⭐ ${String.format("%.1f", displayScore)}",
+                                backgroundColor = BrutalYellow,
+                                textColor = BrutalBlack
+                            )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Title
                 Text(
                     text = media.cleanTitle,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    color = BrutalTextPrimary,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 17.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -829,121 +803,130 @@ private fun MergedResultCard(
                 ).joinToString(" • ")
 
                 if (extraDetails.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = extraDetails,
                         fontSize = 11.sp,
-                        color = Color(0xFFA5ABC7)
+                        fontWeight = FontWeight.Bold,
+                        color = BrutalCyan
                     )
                 }
             }
         }
 
-        // Synopsis
+        // Synopsis Card
         if (!media.overview.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF0F1524))
-                    .padding(12.dp)
+            Spacer(modifier = Modifier.height(14.dp))
+            BrutalCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = BrutalCard,
+                borderColor = BrutalBorderMuted,
+                borderWidth = 1.5.dp,
+                shadowOffset = 3.dp
             ) {
                 Text(
                     text = media.overview!!,
-                    color = Color(0xFFC7CBDD),
+                    color = BrutalTextPrimary,
                     fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 17.sp
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(12.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Direct Action Buttons (merged from OverlayActivity)
+        // Direct Action Buttons with Tactile Brutal Buttons
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Watchlist Button
-            Button(
+            BrutalButton(
                 onClick = onToggleWatchlist,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isSaved) NeonGreen.copy(alpha = 0.2f) else NeonAccent,
-                    contentColor = if (isSaved) NeonGreen else Color.Black
-                ),
-                modifier = Modifier.weight(1.1f),
-                shape = RoundedCornerShape(10.dp)
+                backgroundColor = if (isSaved) BrutalLime else BrutalYellow,
+                modifier = Modifier.weight(1.1f)
             ) {
                 Icon(
                     imageVector = if (isSaved) Icons.Default.BookmarkAdded else Icons.Default.BookmarkAdd,
                     contentDescription = null,
+                    tint = BrutalBlack,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = if (isSaved) "In Library" else "+ Add to Library",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
+                    text = if (isSaved) "SAVED ✓" else "+ WATCHLIST",
+                    fontWeight = FontWeight.Black,
+                    color = BrutalBlack,
+                    fontSize = 11.5.sp
                 )
             }
 
-            // View / Open Web Button
-            Button(
+            // View Button
+            BrutalButton(
                 onClick = onOpenWeb,
-                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
-                modifier = Modifier.weight(0.9f),
-                shape = RoundedCornerShape(10.dp)
+                backgroundColor = BrutalCyan,
+                modifier = Modifier.weight(0.9f)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = BrutalBlack,
                     modifier = Modifier.size(15.dp)
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    text = "View",
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
+                    text = "VIEW ↗",
+                    color = BrutalBlack,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.5.sp
                 )
             }
 
             // Dismiss Button
-            Button(
+            BrutalButton(
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant),
-                shape = RoundedCornerShape(10.dp)
+                backgroundColor = BrutalCardElevated,
+                contentColor = BrutalTextPrimary,
+                borderColor = BrutalBorderMuted
             ) {
-                Text("Dismiss", color = Color.White, fontSize = 12.sp)
+                Text(
+                    text = "CLOSE",
+                    color = BrutalTextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.5.sp
+                )
             }
         }
 
         // Related Formats & Adaptations (Manga, TV Show, Movies)
         val relatedItems = allResults.filter { it.id != media.id }
         if (relatedItems.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Related Formats & Adaptations",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NeonAccent
+                    text = "RELATED FORMATS // ADAPTATIONS",
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Black,
+                    color = BrutalYellow,
+                    letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = "${relatedItems.size} more",
-                    fontSize = 11.sp,
-                    color = TextSecondary
+                    text = "${relatedItems.size} AVAILABLE",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BrutalTextSecondary
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -951,126 +934,127 @@ private fun MergedResultCard(
             ) {
                 relatedItems.forEach { item ->
                     val itemTypeColor = when (item.mediaType.uppercase()) {
-                        "ANIME" -> Color(0xFF9C27B0)
-                        "MANGA", "MANHWA" -> Color(0xFF4CAF50)
-                        "MOVIE" -> Color(0xFF2196F3)
-                        "TV SHOWS", "TV", "TV_SERIES", "WEB SERIES" -> Color(0xFFFF9800)
-                        else -> NeonAccent
+                        "ANIME" -> BrutalPurple
+                        "MANGA", "MANHWA" -> BrutalLime
+                        "MOVIE" -> BrutalCyan
+                        "TV SHOWS", "TV", "TV_SERIES", "WEB SERIES" -> BrutalOrange
+                        else -> BrutalYellow
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF1B1F34))
-                            .border(1.dp, Color(0xFF2C3252), RoundedCornerShape(12.dp))
-                            .clickable { onSelectMedia(item) }
-                            .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    BrutalCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        backgroundColor = BrutalCard,
+                        borderColor = BrutalBorderMuted,
+                        borderWidth = 1.5.dp,
+                        shadowOffset = 3.dp,
+                        onClick = { onSelectMedia(item) }
                     ) {
-                        // Poster thumbnail
-                        if (!item.posterUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = item.posterUrl,
-                                contentDescription = item.cleanTitle,
-                                modifier = Modifier
-                                    .size(width = 40.dp, height = 56.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 40.dp, height = 56.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF2A2A4A)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = item.mediaType.take(2).uppercase(),
-                                    color = itemTypeColor,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Poster thumbnail
+                            if (!item.posterUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = item.posterUrl,
+                                    contentDescription = item.cleanTitle,
+                                    modifier = Modifier
+                                        .size(width = 42.dp, height = 58.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .border(1.dp, BrutalBorder, RoundedCornerShape(6.dp)),
+                                    contentScale = ContentScale.Crop
                                 )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
+                            } else {
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(itemTypeColor.copy(alpha = 0.2f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        .size(width = 42.dp, height = 58.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(BrutalCardElevated)
+                                        .border(1.dp, BrutalBorder, RoundedCornerShape(6.dp)),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = item.mediaType,
+                                        text = item.mediaType.take(2).uppercase(),
                                         color = itemTypeColor,
-                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    BrutalBadge(
+                                        text = item.mediaType,
+                                        backgroundColor = itemTypeColor,
+                                        textColor = BrutalBlack,
+                                        fontSize = 8.5.sp
+                                    )
+
+                                    item.ageRating?.let { age ->
+                                        AgeRatingBadge(rating = age, fontSize = 8.sp)
+                                    }
+
+                                    item.rating?.let { rawRating ->
+                                        val s = if (rawRating > 10f) rawRating / 10f else rawRating
+                                        if (s > 0f) {
+                                            BrutalBadge(
+                                                text = "⭐ ${String.format("%.1f", s)}",
+                                                backgroundColor = BrutalYellow,
+                                                fontSize = 8.5.sp
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = item.cleanTitle,
+                                    color = BrutalTextPrimary,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                val subtitle = listOfNotNull(
+                                    item.year?.toString(),
+                                    item.sourceService
+                                ).joinToString(" • ")
+
+                                if (subtitle.isNotBlank()) {
+                                    Text(
+                                        text = subtitle,
+                                        color = BrutalCyan,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
-
-                                item.ageRating?.let { age ->
-                                    AgeRatingBadge(rating = age, fontSize = 8.sp)
-                                }
-
-                                item.rating?.let { rawRating ->
-                                    val s = if (rawRating > 10f) rawRating / 10f else rawRating
-                                    if (s > 0f) {
-                                        Text(
-                                            text = "⭐ ${String.format("%.1f", s)}",
-                                            fontSize = 10.sp,
-                                            color = NeonOrange,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
                             }
 
-                            Spacer(modifier = Modifier.height(3.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
 
-                            Text(
-                                text = item.cleanTitle,
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            val subtitle = listOfNotNull(
-                                item.year?.toString(),
-                                item.sourceService
-                            ).joinToString(" • ")
-
-                            if (subtitle.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(BrutalYellow)
+                                    .border(1.dp, BrutalBlack, RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
                                 Text(
-                                    text = subtitle,
-                                    color = TextSecondary,
-                                    fontSize = 10.sp
+                                    text = "SWITCH ›",
+                                    color = BrutalBlack,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Black
                                 )
                             }
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF29304F))
-                                .padding(horizontal = 8.dp, vertical = 5.dp)
-                        ) {
-                            Text(
-                                text = "Switch ›",
-                                color = NeonAccent,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
                         }
                     }
                 }
@@ -1080,56 +1064,68 @@ private fun MergedResultCard(
 }
 
 @Composable
-private fun NotFoundCard(
+private fun BrutalNotFoundCard(
     query: String,
     onRetryWithQuery: (String) -> Unit
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+    BrutalCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = 12.dp),
+        backgroundColor = BrutalCard,
+        borderColor = BrutalOrange
     ) {
-        Text(text = "🔍", fontSize = 36.sp)
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(text = "No match found for", color = Color(0xFF888888), fontSize = 12.sp)
-        Text(
-            text = "\"$query\"",
-            color = Color.White,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Try editing the title above to match the exact show, movie, or manga name.",
-            color = Color(0xFF6B7294),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 20.dp)
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().padding(20.dp)
+        ) {
+            Text(text = "🔍", fontSize = 36.sp)
+            Spacer(modifier = Modifier.height(10.dp))
+            BrutalBadge(text = "NO MATCH FOUND", backgroundColor = BrutalOrange)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "\"$query\"",
+                color = BrutalTextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Try typing the exact English or Romaji title in the search box above.",
+                color = BrutalTextSecondary,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 
 @Composable
-private fun ErrorCard(message: String) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+private fun BrutalErrorCard(message: String) {
+    BrutalCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = 12.dp),
+        backgroundColor = BrutalCard,
+        borderColor = BrutalPink
     ) {
-        Text(text = "⚠️", fontSize = 32.sp)
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(text = "Search error", color = Color(0xFFFF5252), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = message,
-            color = Color(0xFF888888),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth().padding(20.dp)
+        ) {
+            Text(text = "⚠️", fontSize = 32.sp)
+            Spacer(modifier = Modifier.height(10.dp))
+            BrutalBadge(text = "SEARCH ERROR", backgroundColor = BrutalPink)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = message,
+                color = BrutalTextSecondary,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }

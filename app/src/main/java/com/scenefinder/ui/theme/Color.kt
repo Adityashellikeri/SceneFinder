@@ -2,38 +2,60 @@ package com.scenefinder.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Instagram-style core palette
-val IGBlack = Color(0xFF000000)
-val IGDark = Color(0xFF0A0A0A)
-val IGSurface = Color(0xFF121212)
-val IGCard = Color(0xFF1C1C1E)
-val IGDivider = Color(0xFF2C2C2E)
+// ─────────────────────────────────────────────────────────────────────────────
+// Neo-Brutalist High-Contrast Palette
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Instagram gradient stop colours
-val IGGradStart = Color(0xFFF58529)   // orange
-val IGGradMid = Color(0xFFDD2A7B)     // pink
-val IGGradEnd = Color(0xFF8134AF)     // purple
+val BrutalYellow = Color(0xFFFFDE59)   // Electric Canary Yellow
+val BrutalCyan = Color(0xFF2DE2E6)     // Neon Cyber Cyan
+val BrutalPink = Color(0xFFFF5E7E)     // Hot Punchy Pink / Magenta
+val BrutalLime = Color(0xFF05FFA1)     // Acid Lime Green
+val BrutalOrange = Color(0xFFFF7B00)   // Vivid Electric Orange
+val BrutalPurple = Color(0xFF9D4EDD)   // Royal Electric Purple
+val BrutalBlue = Color(0xFF3A86FF)     // Ultra Marine Blue
 
-// Text
-val IGTextPrimary = Color(0xFFFFFFFF)
-val IGTextSecondary = Color(0xFF8E8E8E)
-val IGTextTertiary = Color(0xFF555555)
+val BrutalBlack = Color(0xFF000000)    // Pure Jet Black (for borders & hard shadows)
+val BrutalDarkBg = Color(0xFF0E0E12)   // Deep Obsidian Canvas
+val BrutalCard = Color(0xFF191922)     // Neo-Brutalist Card Surface
+val BrutalCardElevated = Color(0xFF22222E)
+val BrutalBorder = Color(0xFFFFFFFF)   // Crisp High-Contrast Light Border
+val BrutalBorderMuted = Color(0xFF3E4357)
 
-// Accent
-val IGBlue = Color(0xFF0095F6)        // IG action blue
-val IGStoryRing = Color(0xFFDD2A7B)
-val IGVerified = Color(0xFF0095F6)
-val IGRed = Color(0xFFED4956)
-val IGGreen = Color(0xFF0DC143)
-val IGYellow = Color(0xFFFFC300)
+val BrutalTextPrimary = Color(0xFFFFFFFF)
+val BrutalTextSecondary = Color(0xFFA6ABB9)
+val BrutalTextInverse = Color(0xFF000000)
 
-// Legacy aliases so existing code compiles unchanged
-val DarkBackground = IGDark
-val DarkSurface = IGSurface
-val DarkSurfaceVariant = IGCard
-val NeonAccent = IGBlue
-val NeonGreen = IGGreen
-val NeonRed = IGRed
-val NeonOrange = IGGradStart
-val TextPrimary = IGTextPrimary
-val TextSecondary = IGTextSecondary
+// ─────────────────────────────────────────────────────────────────────────────
+// Compatibility Aliases for Existing Code
+// ─────────────────────────────────────────────────────────────────────────────
+
+val IGBlack = BrutalDarkBg
+val IGDark = BrutalDarkBg
+val IGSurface = BrutalCard
+val IGCard = BrutalCardElevated
+val IGDivider = BrutalBorderMuted
+
+val IGGradStart = BrutalOrange
+val IGGradMid = BrutalPink
+val IGGradEnd = BrutalPurple
+
+val IGTextPrimary = BrutalTextPrimary
+val IGTextSecondary = BrutalTextSecondary
+val IGTextTertiary = Color(0xFF6B7280)
+
+val IGBlue = BrutalCyan
+val IGStoryRing = BrutalPink
+val IGVerified = BrutalCyan
+val IGRed = BrutalPink
+val IGGreen = BrutalLime
+val IGYellow = BrutalYellow
+
+val DarkBackground = BrutalDarkBg
+val DarkSurface = BrutalCard
+val DarkSurfaceVariant = BrutalCardElevated
+val NeonAccent = BrutalYellow
+val NeonGreen = BrutalLime
+val NeonRed = BrutalPink
+val NeonOrange = BrutalOrange
+val TextPrimary = BrutalTextPrimary
+val TextSecondary = BrutalTextSecondary

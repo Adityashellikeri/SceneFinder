@@ -27,7 +27,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -364,49 +368,55 @@ private fun MainAppScaffold(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 48.dp, vertical = 10.dp),
+                        .padding(horizontal = 36.dp, vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(26.dp),
-                        color = Color(0xF2131316),
-                        border = BorderStroke(0.75.dp, Color(0x33FFFFFF)),
-                        shadowElevation = 12.dp,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
+                            .drawBehind {
+                                drawRoundRect(
+                                    color = Color.Black,
+                                    topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
+                                    size = size,
+                                    cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx())
+                                )
+                            }
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF16161E))
+                            .border(2.dp, Color(0xFFFFDE59), RoundedCornerShape(14.dp))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .padding(horizontal = 6.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             navItems.forEachIndexed { index, item ->
                                 val selected = selectedIndex == index
                                 val pillBg by animateColorAsState(
-                                    targetValue = if (selected) Color(0x240095F6) else Color.Transparent,
-                                    animationSpec = tween(200),
+                                    targetValue = if (selected) Color(0xFFFFDE59) else Color.Transparent,
+                                    animationSpec = tween(150),
                                     label = "pill_bg"
                                 )
                                 val iconTint by animateColorAsState(
-                                    targetValue = if (selected) Color(0xFF00F2FE) else IGTextSecondary,
-                                    animationSpec = tween(180),
+                                    targetValue = if (selected) Color.Black else Color(0xFFA6ABB9),
+                                    animationSpec = tween(150),
                                     label = "tab_color"
-                                )
-                                val iconScale by animateFloatAsState(
-                                    targetValue = if (selected) 1.12f else 1.0f,
-                                    animationSpec = tween(160),
-                                    label = "tab_scale"
                                 )
 
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .clip(RoundedCornerShape(20.dp))
+                                        .clip(RoundedCornerShape(10.dp))
                                         .background(pillBg)
+                                        .then(
+                                            if (selected) Modifier.border(1.5.dp, Color.Black, RoundedCornerShape(10.dp))
+                                            else Modifier
+                                        )
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null
@@ -423,20 +433,16 @@ private fun MainAppScaffold(
                                         Icon(
                                             imageVector = if (selected) item.selectedIcon else item.icon,
                                             contentDescription = item.label,
-                                            modifier = Modifier
-                                                .size(22.dp)
-                                                .graphicsLayer {
-                                                    scaleX = iconScale
-                                                    scaleY = iconScale
-                                                },
+                                            modifier = Modifier.size(20.dp),
                                             tint = iconTint
                                         )
                                         AnimatedVisibility(visible = selected) {
                                             Text(
-                                                text = item.label,
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color.White
+                                                text = item.label.uppercase(),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = Color.Black,
+                                                letterSpacing = 0.5.sp
                                             )
                                         }
                                     }
