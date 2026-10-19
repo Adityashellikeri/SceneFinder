@@ -108,6 +108,17 @@ class AppSettings @Inject constructor(
         _isPageWiseLayout.value = enabled
     }
 
+    private val _theme = MutableStateFlow(
+        AppTheme.values().firstOrNull { it.id == prefs.getString(KEY_THEME, AppTheme.NEO_BRUTALISM.id) }
+            ?: AppTheme.NEO_BRUTALISM
+    )
+    val theme: StateFlow<AppTheme> = _theme.asStateFlow()
+
+    fun setTheme(newTheme: AppTheme) {
+        prefs.edit().putString(KEY_THEME, newTheme.id).apply()
+        _theme.value = newTheme
+    }
+
     companion object {
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
         private const val KEY_TMDB_SESSION_ID = "tmdb_session_id"
@@ -120,5 +131,13 @@ class AppSettings @Inject constructor(
         private const val KEY_SIDE_PANEL = "side_panel_enabled"
         private const val KEY_ARM_TIMEOUT = "arm_timeout"
         private const val KEY_PAGE_WISE_LAYOUT = "page_wise_layout"
+        private const val KEY_THEME = "app_theme_selection"
     }
+}
+
+enum class AppTheme(val id: String, val displayName: String, val tagline: String) {
+    NEO_BRUTALISM("neo_brutalism", "Neo-Brutalism", "Bold borders, hard shadows & electric canary yellow"),
+    CYBERPUNK_2077("cyberpunk_2077", "Cyberpunk 2077", "Night City neon yellow #FCEE0A, trauma red & Kiroshi HUD"),
+    IRON_MAN("iron_man", "Iron Man", "Stark Industries: arc-reactor gold, suit red & JARVIS HUD blue"),
+    DARK_MINIMAL("dark_minimal", "Dark Minimal", "AMOLED deep black with sleek glass accents")
 }

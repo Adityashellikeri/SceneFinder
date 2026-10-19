@@ -98,6 +98,10 @@ import com.scenefinder.ui.theme.IGSurface
 import com.scenefinder.ui.theme.IGTextPrimary
 import com.scenefinder.ui.theme.IGTextSecondary
 import com.scenefinder.ui.theme.SceneFinderTheme
+import com.scenefinder.ui.theme.LocalAppThemeColors
+import com.scenefinder.ui.theme.getThemeColors
+import com.scenefinder.data.prefs.AppTheme
+import androidx.compose.runtime.collectAsState
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -142,7 +146,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            SceneFinderTheme {
+            val currentTheme by settings.theme.collectAsState()
+            SceneFinderTheme(theme = currentTheme) {
                 MainAppScaffold(
                     sessionManager = sessionManager,
                     launcher = launcher,
@@ -358,9 +363,10 @@ private fun MainAppScaffold(
     )
 
     val haptic = LocalHapticFeedback.current
+    val tc = LocalAppThemeColors.current
 
     Scaffold(
-        containerColor = IGBlack,
+        containerColor = tc.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (selectedIndex in 0..1) {
@@ -377,15 +383,15 @@ private fun MainAppScaffold(
                             .height(56.dp)
                             .drawBehind {
                                 drawRoundRect(
-                                    color = Color.Black,
+                                    color = tc.shadowColor,
                                     topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
                                     size = size,
                                     cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx())
                                 )
                             }
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFF16161E))
-                            .border(2.dp, Color(0xFFFFDE59), RoundedCornerShape(14.dp))
+                            .background(tc.surface)
+                            .border(2.dp, tc.primary, RoundedCornerShape(14.dp))
                     ) {
                         Row(
                             modifier = Modifier
@@ -397,12 +403,12 @@ private fun MainAppScaffold(
                             navItems.forEachIndexed { index, item ->
                                 val selected = selectedIndex == index
                                 val pillBg by animateColorAsState(
-                                    targetValue = if (selected) Color(0xFFFFDE59) else Color.Transparent,
+                                    targetValue = if (selected) tc.navAccent else Color.Transparent,
                                     animationSpec = tween(150),
                                     label = "pill_bg"
                                 )
                                 val iconTint by animateColorAsState(
-                                    targetValue = if (selected) Color.Black else Color(0xFFA6ABB9),
+                                    targetValue = if (selected) tc.navAccentText else tc.textSecondary,
                                     animationSpec = tween(150),
                                     label = "tab_color"
                                 )
@@ -441,7 +447,7 @@ private fun MainAppScaffold(
                                                 text = item.label.uppercase(),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Black,
-                                                color = Color.Black,
+                                                color = tc.navAccentText,
                                                 letterSpacing = 0.5.sp
                                             )
                                         }
@@ -458,7 +464,7 @@ private fun MainAppScaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = paddingValues.calculateBottomPadding())
-                .background(IGBlack)
+                .background(tc.background)
         ) {
             AnimatedContent(
                 targetState = selectedIndex,

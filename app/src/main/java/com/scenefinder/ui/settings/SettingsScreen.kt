@@ -72,6 +72,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scenefinder.data.prefs.AppSettings
+import com.scenefinder.data.prefs.AppTheme
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.ui.theme.IGBlack
 import com.scenefinder.ui.theme.IGBlue
@@ -86,6 +87,7 @@ import com.scenefinder.ui.theme.IGSurface
 import com.scenefinder.ui.theme.IGTextPrimary
 import com.scenefinder.ui.theme.IGTextSecondary
 import com.scenefinder.ui.theme.IGTextTertiary
+import com.scenefinder.ui.theme.LocalAppThemeColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -847,6 +849,81 @@ fun SettingsScreen(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 13.sp
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Theme & Visual Style Card ──────────────────────────────────────────
+        item {
+            val currentTheme by settings.theme.collectAsState()
+            val tc = LocalAppThemeColors.current
+
+            IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                IGSettingsSectionHeader(
+                    icon = Icons.Default.Key,
+                    title = "Theme & Visual Style",
+                    subtitle = "Choose your SceneFinder aesthetic"
+                )
+                Spacer(Modifier.height(14.dp))
+
+                val themes = listOf(
+                    Triple(AppTheme.NEO_BRUTALISM,  "⚡", "Neo-Brutalism"),
+                    Triple(AppTheme.CYBERPUNK_2077, "🤖", "Cyberpunk 2077"),
+                    Triple(AppTheme.IRON_MAN,       "🦾", "Iron Man"),
+                    Triple(AppTheme.DARK_MINIMAL,   "🖤", "Dark Minimal")
+                )
+
+                themes.forEach { (theme, emoji, label) ->
+                    val isSelected = currentTheme == theme
+                    val bgColor by animateColorAsState(
+                        targetValue = if (isSelected) tc.primary.copy(alpha = 0.15f) else IGCard,
+                        animationSpec = tween(200),
+                        label = "theme_bg"
+                    )
+                    val borderColor by animateColorAsState(
+                        targetValue = if (isSelected) tc.primary else IGDivider,
+                        animationSpec = tween(200),
+                        label = "theme_border"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(bgColor)
+                            .border(1.5.dp, borderColor, RoundedCornerShape(10.dp))
+                            .clickable { settings.setTheme(theme) }
+                            .padding(horizontal = 14.dp, vertical = 11.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(text = emoji, fontSize = 20.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = label,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = if (isSelected) tc.primary else IGTextPrimary
+                                )
+                                Text(
+                                    text = theme.tagline,
+                                    fontSize = 11.sp,
+                                    color = IGTextSecondary
+                                )
+                            }
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = tc.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }

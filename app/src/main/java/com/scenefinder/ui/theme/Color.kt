@@ -26,6 +26,35 @@ val BrutalTextSecondary = Color(0xFFA6ABB9)
 val BrutalTextInverse = Color(0xFF000000)
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cyberpunk 2077 Night City Palette
+// ─────────────────────────────────────────────────────────────────────────────
+
+val CyberpunkYellow = Color(0xFFFCEE0A)     // Night City Signature Electric Yellow
+val CyberpunkRed = Color(0xFFFF003C)        // Arasaka / Trauma Team Crimson
+val CyberpunkCyan = Color(0xFF00F0FF)       // Kiroshi Optics Cyber Cyan
+val CyberpunkBlue = Color(0xFF05D9E8)       // Militech Electric Blue
+val CyberpunkGreen = Color(0xFF00FF66)      // Netrunner Matrix Terminal Green
+val CyberpunkDarkBg = Color(0xFF08080C)     // Night City Deep Void
+val CyberpunkCard = Color(0xFF13131A)       // Sub-level Carbon Deck
+val CyberpunkCardElevated = Color(0xFF1D1D28) // High-Tier Terminal Slate
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Iron Man / Stark Industries Palette
+// ─────────────────────────────────────────────────────────────────────────────
+
+val IronManGold = Color(0xFFC8992A)         // Stark HUD Gold / Armor Trim
+val IronManGoldBright = Color(0xFFFFD700)   // Arc Reactor Gold Highlight
+val IronManRed = Color(0xFFCC1412)          // Mark III Deep Crimson Armor
+val IronManRedBright = Color(0xFFFF2020)    // Emergency Systems Alert Red
+val IronManBlue = Color(0xFF4FC3F7)         // Arc Reactor Repulsor Blue
+val IronManBlueBright = Color(0xFF00B4FF)   // JARVIS / FRIDAY HUD Cyan
+val IronManDarkBg = Color(0xFF060608)       // Stark Lab Deep Void
+val IronManCard = Color(0xFF0F1015)         // Titanium Suit Plating Dark
+val IronManCardElevated = Color(0xFF1A1C22) // Stark Tower Terminal Slate
+val IronManBorder = Color(0xFFC8992A)       // Gold Trim Border
+val IronManBorderMuted = Color(0xFF3A2E12)  // Dim Gold Muted Border
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Compatibility Aliases for Existing Code
 // ─────────────────────────────────────────────────────────────────────────────
 

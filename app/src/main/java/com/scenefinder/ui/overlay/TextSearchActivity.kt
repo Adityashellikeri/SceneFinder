@@ -110,12 +110,14 @@ import com.scenefinder.ui.theme.BrutalTextInverse
 import com.scenefinder.ui.theme.BrutalTextPrimary
 import com.scenefinder.ui.theme.BrutalTextSecondary
 import com.scenefinder.ui.theme.BrutalYellow
+import com.scenefinder.ui.theme.LocalAppThemeColors
 import com.scenefinder.ui.theme.SceneFinderTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import androidx.compose.runtime.collectAsState
 
 /**
  * Neo-Brutalist SceneFinder search & detail popup.
@@ -146,7 +148,8 @@ class TextSearchActivity : ComponentActivity() {
         }?.trim().orEmpty()
 
         setContent {
-            SceneFinderTheme {
+            val currentTheme by settings.theme.collectAsState()
+            SceneFinderTheme(theme = currentTheme) {
                 TextSearchPopup(
                     initialQuery = rawQuery,
                     repository = repository,
@@ -262,6 +265,7 @@ private fun TextSearchPopup(
             .imePadding(),
         contentAlignment = Alignment.BottomCenter
     ) {
+        val tc = LocalAppThemeColors.current
         AnimatedVisibility(
             visible = true,
             enter = slideInVertically(
@@ -272,15 +276,15 @@ private fun TextSearchPopup(
                 )
             ) + fadeIn()
         ) {
-            // Main Neo-Brutalist Bottom Card
+            // Main Neo-Brutalist / themed Bottom Card
             Box(
                 modifier = Modifier
                     .padding(horizontal = 12.dp, vertical = 18.dp)
                     .fillMaxWidth()
-                    .brutalShadow(offset = 6.dp, color = BrutalBlack, cornerRadius = 16.dp)
+                    .brutalShadow(offset = 6.dp, color = tc.shadowColor, cornerRadius = 16.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(BrutalDarkBg)
-                    .border(2.5.dp, BrutalYellow, RoundedCornerShape(16.dp))
+                    .background(tc.background)
+                    .border(2.5.dp, tc.primary, RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -376,11 +380,12 @@ private fun TextSearchPopup(
         // Neo-Brutalist Watchlist Status Dialog
         if (showStatusDialog && currentMediaForStatus != null) {
             val media = currentMediaForStatus!!
+            val tc2 = LocalAppThemeColors.current
             Dialog(onDismissRequest = { showStatusDialog = false }) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = BrutalCard,
-                    border = androidx.compose.foundation.BorderStroke(2.5.dp, BrutalYellow),
+                    color = tc2.surface,
+                    border = androidx.compose.foundation.BorderStroke(2.5.dp, tc2.primary),
                     shadowElevation = 16.dp,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                 ) {
@@ -389,8 +394,9 @@ private fun TextSearchPopup(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         BrutalBadge(
-                            text = "STATUS PICKER",
-                            backgroundColor = BrutalYellow,
+                            text = if (tc2.isCyberpunk) "[ STATUS.PICKER ]" else if (tc2.isIronMan) "JARVIS: STATUS" else "STATUS PICKER",
+                            backgroundColor = tc2.primary,
+                            textColor = tc2.textInverse,
                             fontSize = 11.sp
                         )
                         Spacer(Modifier.height(10.dp))
@@ -398,17 +404,17 @@ private fun TextSearchPopup(
                             text = media.cleanTitle,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Black,
-                            color = BrutalTextPrimary,
+                            color = tc2.textPrimary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(Modifier.height(16.dp))
 
                         listOf(
-                            Triple("CURRENT", "WATCHING", BrutalCyan),
-                            Triple("PLANNING", "PLAN TO WATCH", BrutalYellow),
-                            Triple("COMPLETED", "COMPLETED", BrutalLime),
-                            Triple("DROPPED", "DROPPED", BrutalPink)
+                            Triple("CURRENT",   "WATCHING",      tc2.secondary),
+                            Triple("PLANNING",  "PLAN TO WATCH", tc2.primary),
+                            Triple("COMPLETED", "COMPLETED",     tc2.tertiary),
+                            Triple("DROPPED",   "DROPPED",       tc2.accent)
                         ).forEach { (code, title, color) ->
                             Box(
                                 modifier = Modifier
@@ -416,7 +422,7 @@ private fun TextSearchPopup(
                                     .padding(vertical = 4.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(color)
-                                    .border(2.dp, BrutalBlack, RoundedCornerShape(8.dp))
+                                    .border(2.dp, tc2.shadowColor, RoundedCornerShape(8.dp))
                                     .clickable {
                                         showStatusDialog = false
                                         scope.launch {
@@ -448,7 +454,7 @@ private fun TextSearchPopup(
                                     text = title,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Black,
-                                    color = BrutalBlack,
+                                    color = tc2.textInverse,
                                     letterSpacing = 0.5.sp
                                 )
                             }
@@ -459,7 +465,7 @@ private fun TextSearchPopup(
                             onClick = { showStatusDialog = false },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("CANCEL", color = BrutalTextSecondary, fontWeight = FontWeight.Bold)
+                            Text("CANCEL", color = tc2.textSecondary, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -478,20 +484,21 @@ private fun BrutalSearchBar(
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit
 ) {
+    val tc = LocalAppThemeColors.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .brutalShadow(offset = 3.dp, color = BrutalBlack, cornerRadius = 10.dp)
+            .brutalShadow(offset = 3.dp, color = tc.shadowColor, cornerRadius = 10.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(BrutalCard)
-            .border(2.dp, BrutalBorder, RoundedCornerShape(10.dp))
+            .background(tc.surface)
+            .border(2.dp, tc.border, RoundedCornerShape(10.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = Icons.Default.Search,
             contentDescription = "Search",
-            tint = BrutalYellow,
+            tint = tc.primary,
             modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
@@ -499,7 +506,7 @@ private fun BrutalSearchBar(
             if (query.isEmpty()) {
                 Text(
                     text = "SEARCH ANY TITLE...",
-                    color = BrutalTextSecondary,
+                    color = tc.textSecondary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -508,11 +515,11 @@ private fun BrutalSearchBar(
                 value = query,
                 onValueChange = onQueryChange,
                 textStyle = TextStyle(
-                    color = BrutalTextPrimary,
+                    color = tc.textPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                cursorBrush = SolidColor(BrutalYellow),
+                cursorBrush = SolidColor(tc.primary),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onSearch() }),
@@ -527,31 +534,32 @@ private fun BrutalSearchBar(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Clear",
-                    tint = BrutalPink,
+                    tint = tc.accent,
                     modifier = Modifier.size(17.dp)
                 )
             }
             Spacer(modifier = Modifier.width(6.dp))
         }
-        // Bold yellow action block
+        // Accent action button
         Box(
             modifier = Modifier
                 .size(32.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(BrutalYellow)
-                .border(1.5.dp, BrutalBlack, RoundedCornerShape(6.dp))
+                .background(tc.primary)
+                .border(1.5.dp, tc.shadowColor, RoundedCornerShape(6.dp))
                 .clickable { onSearch() },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = "Run Search",
-                tint = BrutalBlack,
+                tint = tc.textInverse,
                 modifier = Modifier.size(17.dp)
             )
         }
     }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Neo-Brutalist Sub-composables
@@ -559,6 +567,17 @@ private fun BrutalSearchBar(
 
 @Composable
 private fun BrutalPopupHeader(onDismiss: () -> Unit) {
+    val tc = LocalAppThemeColors.current
+    val headerLabel = when {
+        tc.isCyberpunk -> "[ SCENEFINDER.HUD ]"
+        tc.isIronMan   -> "FRIDAY: SEARCH"
+        else           -> "SCENEFINDER"
+    }
+    val subLabel = when {
+        tc.isCyberpunk -> "v2.077 // MEDIA-DETECT"
+        tc.isIronMan   -> "STARK TECH // MEDIA-DETECT"
+        else           -> "NEO-MEDIA DETECT"
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -566,17 +585,18 @@ private fun BrutalPopupHeader(onDismiss: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BrutalBadge(
-                text = "SCENEFINDER",
-                backgroundColor = BrutalYellow,
+                text = headerLabel,
+                backgroundColor = tc.primary,
+                textColor = tc.textInverse,
                 fontSize = 11.sp
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                text = "NEO-MEDIA DETECT",
+                text = subLabel,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Black,
                 fontSize = 11.sp,
-                color = BrutalCyan,
+                color = tc.secondary,
                 letterSpacing = 0.6.sp
             )
         }
@@ -584,15 +604,15 @@ private fun BrutalPopupHeader(onDismiss: () -> Unit) {
             modifier = Modifier
                 .size(28.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(BrutalCardElevated)
-                .border(1.5.dp, BrutalBorder, RoundedCornerShape(6.dp))
+                .background(tc.surfaceElevated)
+                .border(1.5.dp, tc.border, RoundedCornerShape(6.dp))
                 .clickable(onClick = onDismiss),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Close",
-                tint = BrutalTextPrimary,
+                tint = tc.textPrimary,
                 modifier = Modifier.size(15.dp)
             )
         }
@@ -601,29 +621,35 @@ private fun BrutalPopupHeader(onDismiss: () -> Unit) {
 
 @Composable
 private fun BrutalIdleCard() {
+    val tc = LocalAppThemeColors.current
+    val idleEmoji = when {
+        tc.isCyberpunk -> "💻"
+        tc.isIronMan   -> "🧠"
+        else           -> "⚡"
+    }
     BrutalCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 14.dp),
-        backgroundColor = BrutalCard,
-        borderColor = BrutalBorder
+        backgroundColor = tc.surface,
+        borderColor = tc.border
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth().padding(22.dp)
         ) {
-            Text(text = "⚡", fontSize = 36.sp)
+            Text(text = idleEmoji, fontSize = 36.sp)
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = "TYPE OR SELECT ANY TITLE",
-                color = BrutalYellow,
+                color = tc.primary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Black
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "AniList • TMDB • MangaDex Universal Lookup",
-                color = BrutalTextSecondary,
+                color = tc.textSecondary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
