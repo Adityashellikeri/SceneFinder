@@ -133,6 +133,8 @@ class MainActivity : ComponentActivity() {
 
         if (PermissionHelper.canDrawOverlays(this) && settings.sidePanelEnabled.value) {
             SidePanelOverlayService.start(this)
+        } else {
+            SidePanelOverlayService.stop(this)
         }
 
         setContent {
@@ -158,6 +160,8 @@ class MainActivity : ComponentActivity() {
         applyNativeMaxRefreshRate()
         if (PermissionHelper.canDrawOverlays(this) && settings.sidePanelEnabled.value) {
             SidePanelOverlayService.start(this)
+        } else {
+            SidePanelOverlayService.stop(this)
         }
 
         // Check if TMDB approval was pending

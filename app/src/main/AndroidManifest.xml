@@ -69,9 +69,16 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:taskAffinity=""
+            android:label="SceneFinder"
+            android:windowSoftInputMode="adjustResize"
             android:launchMode="singleTask">
-            <intent-filter>
+            <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>

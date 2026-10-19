@@ -39,7 +39,7 @@ class AppSettings @Inject constructor(
     private val _autoOverlay = MutableStateFlow(prefs.getBoolean(KEY_AUTO_OVERLAY, true))
     val autoOverlay: StateFlow<Boolean> = _autoOverlay.asStateFlow()
 
-    private val _sidePanelEnabled = MutableStateFlow(prefs.getBoolean(KEY_SIDE_PANEL, true))
+    private val _sidePanelEnabled = MutableStateFlow(prefs.getBoolean(KEY_SIDE_PANEL, false))
     val sidePanelEnabled: StateFlow<Boolean> = _sidePanelEnabled.asStateFlow()
 
     private val _armTimeoutSeconds = MutableStateFlow(prefs.getInt(KEY_ARM_TIMEOUT, 45))

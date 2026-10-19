@@ -1,6 +1,7 @@
 package com.scenefinder.ui.overlay
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -17,10 +18,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -31,23 +32,37 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,32 +73,53 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.scenefinder.data.local.dao.EnrichedMediaDao
 import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.data.prefs.AppSettings
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.domain.model.MediaType
 import com.scenefinder.domain.parser.CandidateExtractor
 import com.scenefinder.ui.components.AgeRatingBadge
+import com.scenefinder.ui.theme.DarkSurface
+import com.scenefinder.ui.theme.DarkSurfaceVariant
+import com.scenefinder.ui.theme.NeonAccent
+import com.scenefinder.ui.theme.NeonGreen
+import com.scenefinder.ui.theme.NeonOrange
 import com.scenefinder.ui.theme.SceneFinderTheme
+import com.scenefinder.ui.theme.TextSecondary
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * Handles Android text-selection ACTION_PROCESS_TEXT intent.
- * When the user selects text anywhere in Android and taps "SceneFinder" in the
- * popup toolbar (alongside Copy / Paste / Select All), this activity launches
- * as a translucent floating dialog, searches for the selected text, and presents
- * a rich result card — without ever leaving the current app.
+ * Merged SceneFinder search & detail popup.
+ *
+ * Triggered from:
+ * 1) Android text selection menu (ACTION_PROCESS_TEXT) next to Copy/Share
+ * 2) Direct Share sheet (ACTION_SEND)
+ *
+ * Features:
+ * - Pre-filled, live-editable search bar with the selected text
+ * - One-click re-search right inside the popup
+ * - Direct unified results view (poster, rating, age rating, synopsis)
+ * - Built-in Watchlist / Library management (Watching, Plan to Watch, Completed, Dropped)
+ * - Direct external web links (AniList / TMDB)
+ * - No secondary dialogs: complete all-in-one experience
  */
 @AndroidEntryPoint
 class TextSearchActivity : ComponentActivity() {
@@ -91,30 +127,32 @@ class TextSearchActivity : ComponentActivity() {
     @Inject lateinit var repository: MediaEnrichmentRepository
     @Inject lateinit var settings: AppSettings
     @Inject lateinit var candidateExtractor: CandidateExtractor
+    @Inject lateinit var dao: EnrichedMediaDao
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val selectedText = intent
-            ?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
-            ?.toString()
-            ?.trim()
-            ?: run {
-                Toast.makeText(this, "No text selected", Toast.LENGTH_SHORT).show()
-                finish()
-                return
-            }
+        val rawQuery = when (intent?.action) {
+            Intent.ACTION_PROCESS_TEXT -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+            else -> intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
+                ?: intent?.getStringExtra(Intent.EXTRA_TEXT)
+        }?.trim().orEmpty()
 
         setContent {
             SceneFinderTheme {
                 TextSearchPopup(
-                    query = selectedText,
+                    initialQuery = rawQuery,
                     repository = repository,
                     settings = settings,
                     candidateExtractor = candidateExtractor,
+                    dao = dao,
                     onDismiss = { finish() },
-                    onOpenOverlay = { media ->
-                        OverlayActivity.show(this, media)
+                    onOpenWeb = { url ->
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        startActivity(browserIntent)
                         finish()
                     }
                 )
@@ -128,7 +166,8 @@ class TextSearchActivity : ComponentActivity() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 private sealed class SearchState {
-    object Loading : SearchState()
+    object Idle : SearchState()
+    data class Loading(val query: String) : SearchState()
     data class Found(val result: EnrichedMediaEntity) : SearchState()
     data class NotFound(val query: String) : SearchState()
     data class Error(val message: String) : SearchState()
@@ -140,28 +179,55 @@ private sealed class SearchState {
 
 @Composable
 private fun TextSearchPopup(
-    query: String,
+    initialQuery: String,
     repository: MediaEnrichmentRepository,
     settings: AppSettings,
     candidateExtractor: CandidateExtractor,
+    dao: EnrichedMediaDao,
     onDismiss: () -> Unit,
-    onOpenOverlay: (EnrichedMediaEntity) -> Unit
+    onOpenWeb: (String) -> Unit
 ) {
-    var state by remember { mutableStateOf<SearchState>(SearchState.Loading) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
-    LaunchedEffect(query) {
-        state = SearchState.Loading
+    var searchQuery by remember { mutableStateOf(initialQuery) }
+    var activeQuery by remember { mutableStateOf(initialQuery) }
+    var state by remember { mutableStateOf<SearchState>(if (initialQuery.isNotBlank()) SearchState.Loading(initialQuery) else SearchState.Idle) }
+
+    val anilistToken by settings.anilistToken.collectAsState()
+    val apiKey by settings.tmdbApiKey.collectAsState()
+    val tmdbSessionId by settings.tmdbSessionId.collectAsState()
+    val tmdbAccountId by settings.tmdbAccountId.collectAsState()
+
+    var isSaved by remember { mutableStateOf(false) }
+    var showStatusDialog by remember { mutableStateOf(false) }
+    var currentMediaForStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
+
+    // Execute search whenever activeQuery changes
+    LaunchedEffect(activeQuery) {
+        val q = activeQuery.trim()
+        if (q.isBlank()) {
+            state = SearchState.Idle
+            return@LaunchedEffect
+        }
+        state = SearchState.Loading(q)
         withContext(Dispatchers.IO) {
             try {
-                val apiKey = settings.tmdbApiKey.value
+                val effectiveKey = apiKey.ifBlank { MediaEnrichmentRepository.DEFAULT_TMDB_API_KEY }
                 val candidates = candidateExtractor.extractCandidates(
-                    listOf(query), "Text Selection Search"
+                    listOf(q), "Text Selection Search"
                 )
                 val result = candidates.firstNotNullOfOrNull { c ->
-                    repository.enrichCandidate(c, apiKey)
+                    repository.enrichCandidate(c, effectiveKey)
                 }
-                state = if (result != null) SearchState.Found(result)
-                else SearchState.NotFound(query)
+                if (result != null) {
+                    val existing = dao.getById(result.id)
+                    isSaved = existing != null
+                    state = SearchState.Found(result)
+                } else {
+                    state = SearchState.NotFound(q)
+                }
             } catch (e: Exception) {
                 state = SearchState.Error(e.message ?: "Unknown error")
             }
@@ -171,12 +237,13 @@ private fun TextSearchPopup(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.60f))
+            .background(Color.Black.copy(alpha = 0.65f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onDismiss
-            ),
+            )
+            .imePadding(),
         contentAlignment = Alignment.BottomCenter
     ) {
         AnimatedVisibility(
@@ -191,32 +258,195 @@ private fun TextSearchPopup(
         ) {
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 32.dp)
+                    .padding(horizontal = 14.dp, vertical = 20.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
+                    .clip(RoundedCornerShape(26.dp))
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color(0xFF1A1A2E), Color(0xFF16213E))
+                            colors = listOf(Color(0xFF1E1E34), Color(0xFF141728))
                         )
                     )
+                    .border(1.dp, Color(0xFF333A56), RoundedCornerShape(26.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {}
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    PopupHeader(query = query, onDismiss = onDismiss)
-                    Spacer(modifier = Modifier.height(20.dp))
+                Column(
+                    modifier = Modifier
+                        .padding(18.dp)
+                        .heightIn(max = 620.dp)
+                ) {
+                    // Header Row
+                    PopupHeader(onDismiss = onDismiss)
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Editable Search Bar with Selected Text
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = {
+                            if (searchQuery.trim().isNotBlank()) {
+                                focusManager.clearFocus()
+                                activeQuery = searchQuery.trim()
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Content Area (Loading, Results, Not Found, Error)
                     AnimatedContent(
                         targetState = state,
-                        transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
+                        transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(180)) },
                         label = "search_state"
                     ) { s ->
                         when (s) {
-                            is SearchState.Loading -> SearchingIndicator(query)
-                            is SearchState.Found -> ResultCard(s.result, onOpenOverlay)
-                            is SearchState.NotFound -> NotFoundCard(s.query)
+                            is SearchState.Idle -> IdleCard()
+                            is SearchState.Loading -> SearchingIndicator(s.query)
+                            is SearchState.Found -> MergedResultCard(
+                                media = s.result,
+                                isSaved = isSaved,
+                                onToggleWatchlist = {
+                                    if (isSaved) {
+                                        scope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                repository.removeFromLibrary(
+                                                    media = s.result,
+                                                    anilistToken = anilistToken,
+                                                    tmdbApiKey = apiKey,
+                                                    tmdbSessionId = tmdbSessionId,
+                                                    tmdbAccountId = tmdbAccountId
+                                                )
+                                            }
+                                            isSaved = false
+                                        }
+                                    } else {
+                                        currentMediaForStatus = s.result
+                                        showStatusDialog = true
+                                    }
+                                },
+                                onOpenWeb = {
+                                    s.result.directWebUrl?.let { onOpenWeb(it) }
+                                },
+                                onDismiss = onDismiss
+                            )
+                            is SearchState.NotFound -> NotFoundCard(
+                                query = s.query,
+                                onRetryWithQuery = { newQ ->
+                                    searchQuery = newQ
+                                    activeQuery = newQ
+                                }
+                            )
                             is SearchState.Error -> ErrorCard(s.message)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Watchlist Status Picker Dialog
+        if (showStatusDialog && currentMediaForStatus != null) {
+            val media = currentMediaForStatus!!
+            Dialog(onDismissRequest = { showStatusDialog = false }) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = DarkSurface,
+                    tonalElevation = 6.dp,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Add to Watchlist",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = media.cleanTitle,
+                            fontSize = 13.sp,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(16.dp))
+
+                        listOf(
+                            Triple("CURRENT", "Watching", "Currently watching / reading"),
+                            Triple("PLANNING", "Plan to Watch", "Save to watch later"),
+                            Triple("COMPLETED", "Completed", "Finished watching"),
+                            Triple("DROPPED", "Dropped", "Stopped watching")
+                        ).forEach { (code, title, desc) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black.copy(alpha = 0.5f))
+                                    .clickable {
+                                        showStatusDialog = false
+                                        scope.launch {
+                                            val toSave = media.copy(
+                                                userStatus = code,
+                                                cachedAt = System.currentTimeMillis()
+                                            )
+                                            val synced = withContext(Dispatchers.IO) {
+                                                repository.saveToLibrary(
+                                                    media = toSave,
+                                                    anilistToken = anilistToken,
+                                                    tmdbApiKey = apiKey,
+                                                    tmdbSessionId = tmdbSessionId,
+                                                    tmdbAccountId = tmdbAccountId
+                                                )
+                                            }
+                                            isSaved = true
+                                            val statusLabel = when (code) {
+                                                "CURRENT" -> "Watching"
+                                                "COMPLETED" -> "Completed"
+                                                "DROPPED" -> "Dropped"
+                                                else -> "Plan to Watch"
+                                            }
+                                            val isAnime = toSave.mediaType.equals("Anime", ignoreCase = true) ||
+                                                    toSave.mediaType.equals("Manga", ignoreCase = true)
+                                            val target = if (isAnime) "AniList" else "TMDB"
+                                            val msg = if (synced) "Saved as $statusLabel & synced to $target!" else "Saved as $statusLabel"
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val dotColor = when (code) {
+                                    "CURRENT" -> Color(0xFF0095F6)
+                                    "PLANNING" -> Color(0xFFA855F7)
+                                    "COMPLETED" -> Color(0xFF10B981)
+                                    else -> Color(0xFFEF4444)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(dotColor)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                    Text(desc, fontSize = 11.sp, color = TextSecondary)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(
+                            onClick = { showStatusDialog = false },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Cancel", color = TextSecondary)
                         }
                     }
                 }
@@ -226,11 +456,92 @@ private fun TextSearchPopup(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Search Bar Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF262940))
+            .border(1.dp, Color(0xFF3F4668), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = "Search",
+            tint = NeonAccent,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Box(modifier = Modifier.weight(1f)) {
+            if (query.isEmpty()) {
+                Text(
+                    text = "Search media title...",
+                    color = Color(0xFF7A82A6),
+                    fontSize = 14.sp
+                )
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                textStyle = TextStyle(
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                cursorBrush = SolidColor(NeonAccent),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (query.isNotEmpty()) {
+            IconButton(
+                onClick = { onQueryChange("") },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Clear",
+                    tint = Color(0xFFAAAAAA),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+        }
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(CircleShape)
+                .background(NeonAccent)
+                .clickable { onSearch() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Run Search",
+                tint = Color.Black,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-composables
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun PopupHeader(query: String, onDismiss: () -> Unit) {
+private fun PopupHeader(onDismiss: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -239,7 +550,7 @@ private fun PopupHeader(query: String, onDismiss: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
@@ -252,7 +563,7 @@ private fun PopupHeader(query: String, onDismiss: () -> Unit) {
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
             Spacer(modifier = Modifier.width(10.dp))
@@ -264,21 +575,47 @@ private fun PopupHeader(query: String, onDismiss: () -> Unit) {
                     color = Color.White
                 )
                 Text(
-                    text = "\"$query\"",
+                    text = "Instant Media Recognition",
                     fontSize = 11.sp,
-                    color = Color(0xFFAAAAAA),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = Color(0xFF8E95B8)
                 )
             }
         }
-        IconButton(onClick = onDismiss) {
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.size(32.dp)
+        ) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Close",
-                tint = Color(0xFF888888)
+                tint = Color(0xFF8E95B8)
             )
         }
+    }
+}
+
+@Composable
+private fun IdleCard() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp)
+    ) {
+        Text(text = "🎬", fontSize = 36.sp)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Type any title to search",
+            color = Color.White,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Search across AniList, TMDB, MangaDex & more",
+            color = Color(0xFF888888),
+            fontSize = 12.sp
+        )
     }
 }
 
@@ -302,19 +639,19 @@ private fun SearchingIndicator(query: String) {
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(60.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF0F3460).copy(alpha = alpha)),
+                .background(Color(0xFF262D4A).copy(alpha = alpha)),
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator(
-                modifier = Modifier.size(32.dp),
-                color = Color(0xFFFF6B35),
+                modifier = Modifier.size(30.dp),
+                color = NeonAccent,
                 strokeWidth = 3.dp
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(text = "Searching for", color = Color(0xFF888888), fontSize = 13.sp)
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(text = "Searching for", color = Color(0xFF888888), fontSize = 12.sp)
         Text(
             text = "\"$query\"",
             color = Color.White,
@@ -323,32 +660,44 @@ private fun SearchingIndicator(query: String) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = "Checking AniList · TMDB · MangaDex…",
-            color = Color(0xFF555555),
+            color = Color(0xFF707798),
             fontSize = 11.sp,
             fontStyle = FontStyle.Italic
         )
     }
 }
 
+/**
+ * Fully merged result card with complete details and action buttons directly integrated.
+ */
 @Composable
-private fun ResultCard(
+private fun MergedResultCard(
     media: EnrichedMediaEntity,
-    onOpenOverlay: (EnrichedMediaEntity) -> Unit
+    isSaved: Boolean,
+    onToggleWatchlist: () -> Unit,
+    onOpenWeb: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val typeColor = when (media.mediaType) {
-        MediaType.ANIME.name -> Color(0xFF9C27B0)
-        MediaType.MANGA.name,
-        MediaType.MANHWA.name -> Color(0xFF4CAF50)
-        MediaType.MOVIE.name -> Color(0xFF2196F3)
+    val typeColor = when (media.mediaType.uppercase()) {
+        "ANIME" -> Color(0xFF9C27B0)
+        "MANGA", "MANHWA" -> Color(0xFF4CAF50)
+        "MOVIE" -> Color(0xFF2196F3)
         MediaType.TV_SERIES.name,
         MediaType.TV_SHOWS.name,
-        MediaType.WEB_SERIES.name -> Color(0xFFFF9800)
-        else -> Color(0xFF607D8B)
+        MediaType.WEB_SERIES.name,
+        "TV" -> Color(0xFFFF9800)
+        else -> NeonAccent
     }
-    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Top section: Poster + Primary Details
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -358,151 +707,222 @@ private fun ResultCard(
                     model = media.posterUrl,
                     contentDescription = media.cleanTitle,
                     modifier = Modifier
-                        .width(90.dp)
-                        .height(130.dp)
-                        .clip(RoundedCornerShape(14.dp)),
+                        .width(88.dp)
+                        .height(126.dp)
+                        .clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .width(90.dp)
-                        .height(130.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .width(88.dp)
+                        .height(126.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF2A2A4A)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = media.mediaType?.take(2)?.uppercase() ?: "??",
+                        text = media.mediaType.take(2).uppercase(),
                         color = typeColor,
                         fontWeight = FontWeight.Bold,
                         fontSize = 22.sp
                     )
                 }
             }
+
             Column(modifier = Modifier.weight(1f)) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(typeColor.copy(alpha = 0.18f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                // Badges row: Media Type + Age Rating + Score
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = media.mediaType ?: "MEDIA",
-                        color = typeColor,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(typeColor.copy(alpha = 0.20f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = media.mediaType,
+                            color = typeColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    media.ageRating?.let { age ->
+                        AgeRatingBadge(rating = age, fontSize = 9.sp)
+                    }
+
+                    // Score (properly scaled to 10 max)
+                    media.rating?.let { rawRating ->
+                        val displayScore = if (rawRating > 10f) rawRating / 10f else rawRating
+                        if (displayScore > 0f) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Rating",
+                                    tint = NeonOrange,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = String.format("%.1f", displayScore),
+                                    fontSize = 11.sp,
+                                    color = NeonOrange,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
+
                 Spacer(modifier = Modifier.height(6.dp))
+
+                // Title
                 Text(
                     text = media.cleanTitle,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                    maxLines = 3,
+                    fontSize = 16.sp,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                if (!media.ageRating.isNullOrBlank()) {
-                    AgeRatingBadge(rating = media.ageRating!!)
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-                if (media.rating != null && media.rating!! > 0f) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "⭐", fontSize = 12.sp)
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "${"%.1f".format(media.rating!! / 10.0)} / 10",
-                            color = Color(0xFFFFD700),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+
+                // Subtitle metadata
+                val extraDetails = listOfNotNull(
+                    media.year?.toString(),
+                    media.season?.let { "S$it" },
+                    media.episode?.let { "EP$it" },
+                    media.chapter?.let { "Ch.$it" },
+                    media.sourceService
+                ).joinToString(" • ")
+
+                if (extraDetails.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = extraDetails,
+                        fontSize = 11.sp,
+                        color = Color(0xFFA5ABC7)
+                    )
                 }
             }
         }
-        Spacer(modifier = Modifier.height(14.dp))
+
+        // Synopsis
         if (!media.overview.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(12.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF0F1A2E))
+                    .background(Color(0xFF0F1524))
                     .padding(12.dp)
             ) {
                 Text(
                     text = media.overview!!,
-                    color = Color(0xFFCCCCCC),
+                    color = Color(0xFFC7CBDD),
                     fontSize = 12.sp,
-                    maxLines = 5,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 18.sp
+                    lineHeight = 17.sp
                 )
             }
-            Spacer(modifier = Modifier.height(14.dp))
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(Color(0xFFFF6B35), Color(0xFFDD2A7B))
-                    )
-                )
-                .clickable { onOpenOverlay(media) }
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Direct Action Buttons (merged from OverlayActivity)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+            // Watchlist Button
+            Button(
+                onClick = onToggleWatchlist,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSaved) NeonGreen.copy(alpha = 0.2f) else NeonAccent,
+                    contentColor = if (isSaved) NeonGreen else Color.Black
+                ),
+                modifier = Modifier.weight(1.1f),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(
+                    imageVector = if (isSaved) Icons.Default.BookmarkAdded else Icons.Default.BookmarkAdd,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (isSaved) "In Library" else "+ Add to Library",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+
+            // View / Open Web Button
+            Button(
+                onClick = onOpenWeb,
+                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
+                modifier = Modifier.weight(0.9f),
+                shape = RoundedCornerShape(10.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    tint = Color.Black,
+                    modifier = Modifier.size(15.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(Modifier.width(5.dp))
                 Text(
-                    text = "View Full Details",
-                    color = Color.White,
+                    text = "View",
+                    color = Color.Black,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    fontSize = 12.sp
                 )
+            }
+
+            // Dismiss Button
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = DarkSurfaceVariant),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Dismiss", color = Color.White, fontSize = 12.sp)
             }
         }
     }
 }
 
 @Composable
-private fun NotFoundCard(query: String) {
+private fun NotFoundCard(
+    query: String,
+    onRetryWithQuery: (String) -> Unit
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 20.dp)
+            .padding(vertical = 16.dp)
     ) {
-        Text(text = "🔍", fontSize = 40.sp)
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "No match found for", color = Color(0xFF888888), fontSize = 13.sp)
+        Text(text = "🔍", fontSize = 36.sp)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(text = "No match found for", color = Color(0xFF888888), fontSize = 12.sp)
         Text(
             text = "\"$query\"",
             color = Color.White,
-            fontSize = 15.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Try selecting the exact title of the anime, movie, manga, or manhwa.",
-            color = Color(0xFF555555),
+            text = "Try editing the title above to match the exact show, movie, or manga name.",
+            color = Color(0xFF6B7294),
             fontSize = 11.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 24.dp)
+            modifier = Modifier.padding(horizontal = 20.dp)
         )
     }
 }
@@ -513,10 +933,10 @@ private fun ErrorCard(message: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 20.dp)
+            .padding(vertical = 16.dp)
     ) {
-        Text(text = "⚠️", fontSize = 36.sp)
-        Spacer(modifier = Modifier.height(12.dp))
+        Text(text = "⚠️", fontSize = 32.sp)
+        Spacer(modifier = Modifier.height(10.dp))
         Text(text = "Search error", color = Color(0xFFFF5252), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(6.dp))
         Text(
