@@ -101,8 +101,8 @@ class SidePanelOverlayService : Service() {
         }
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("SceneFinder Side Panel Active")
-            .setContentText("Tap floating edge handle to identify any reel or manga")
+            .setContentTitle("SceneFinder Active")
+            .setContentText("Tap floating button to trigger Circle to Search")
             .setSmallIcon(android.R.drawable.ic_menu_search)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
@@ -136,7 +136,7 @@ class SidePanelOverlayService : Service() {
             y = 400
         }
 
-        // Instagram-style floating pill dock
+        // Single Circle-to-Search button pill
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -144,7 +144,6 @@ class SidePanelOverlayService : Service() {
             elevation = 20f
         }
 
-        // 1. Circle-to-Search button — IG orange/pink
         val ctsBtn = ImageView(this).apply {
             setImageResource(android.R.drawable.ic_menu_search)
             setColorFilter(Color.parseColor("#F58529"))
@@ -156,40 +155,16 @@ class SidePanelOverlayService : Service() {
             }
         }
 
-        // 2. Subtle thin divider
-        val divider = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(22, 1).apply {
-                setMargins(0, 10, 0, 10)
-            }
-            setBackgroundColor(Color.parseColor("#44FFFFFF"))
-        }
-
-        // 3. AI Scene Scan button — IG purple/pink
-        val sceneBtn = ImageView(this).apply {
-            setImageResource(android.R.drawable.ic_menu_camera)
-            setColorFilter(Color.parseColor("#DD2A7B"))
-            contentDescription = "Scan Anime, Movie, Manga & Manhwa Scene"
-            setPadding(12, 12, 12, 12)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#33DD2A7B"))
-            }
-        }
-
         container.addView(ctsBtn)
-        container.addView(divider)
-        container.addView(sceneBtn)
 
         serviceScope.launch {
             sessionManager.state.collect { state ->
                 val isArmed = state is SessionState.Armed
-                // Armed = green ring, idle = IG gradient border
-                val borderColor = if (isArmed) Color.parseColor("#0DC143") else Color.parseColor("#DD2A7B")
+                val borderColor = if (isArmed) Color.parseColor("#0DC143") else Color.parseColor("#F58529")
                 val ctsIconColor = if (isArmed) Color.parseColor("#0DC143") else Color.parseColor("#F58529")
 
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    // Pill shape: rounded left, flat right (attached to edge)
                     cornerRadii = floatArrayOf(32f, 32f, 0f, 0f, 0f, 0f, 32f, 32f)
                     setColor(Color.parseColor("#F0000000"))
                     setStroke(2, borderColor)
@@ -221,14 +196,7 @@ class SidePanelOverlayService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!isDragging) {
-                        val midY = view.height / 2f
-                        if (event.y < midY) {
-                            onCtsTapped()
-                        } else {
-                            onSceneScanTapped()
-                        }
-                    }
+                    if (!isDragging) onCtsTapped()
                     true
                 }
                 else -> false
@@ -255,27 +223,6 @@ class SidePanelOverlayService : Service() {
 
         val res = launcher.triggerSearch(applicationContext)
         sessionManager.log("Circle to Search launch attempt: $res")
-    }
-
-    private fun onSceneScanTapped() {
-        triggerHaptic()
-
-        val service = SceneAccessibilityService.instance
-        if (service != null) {
-            service.triggerDirectSceneRecognition()
-        } else {
-            Toast.makeText(
-                applicationContext,
-                "Please enable SceneFinder Accessibility Service",
-                Toast.LENGTH_LONG
-            ).show()
-            try {
-                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                startActivity(intent)
-            } catch (_: Exception) {}
-        }
     }
 
     private fun triggerHaptic() {
