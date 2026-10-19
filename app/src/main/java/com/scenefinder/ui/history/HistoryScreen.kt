@@ -4,11 +4,15 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -99,6 +103,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.scenefinder.data.local.dao.EnrichedMediaDao
 import com.scenefinder.data.local.entity.EnrichedMediaEntity
+import com.scenefinder.ui.components.AgeRatingBadge
 import com.scenefinder.data.prefs.AppSettings
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.ui.theme.IGBlack
@@ -134,6 +139,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
@@ -313,6 +319,7 @@ fun HistoryScreen(
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
+    val haptic = LocalHapticFeedback.current
 
     var itemToSaveWithStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
@@ -920,16 +927,46 @@ fun HistoryScreen(
                 ) {
                     items(statusFilters) { (code, label) ->
                         val selected = selectedStatusFilter == code
-                        val bgColor by animateColorAsState(if (selected) IGTextPrimary else IGCard, tween(200), label = "c")
-                        val textColor by animateColorAsState(if (selected) IGBlack else IGTextSecondary, tween(200), label = "t")
+                        val chipAccent = when (code) {
+                            "CURRENT" -> Color(0xFF0095F6)
+                            "PLANNING" -> Color(0xFFA855F7)
+                            "COMPLETED" -> Color(0xFF10B981)
+                            "DROPPED" -> Color(0xFFEF4444)
+                            else -> Color(0xFF00F2FE)
+                        }
+                        val bgColor by animateColorAsState(
+                            targetValue = if (selected) chipAccent.copy(alpha = 0.22f) else IGCard,
+                            animationSpec = tween(180),
+                            label = "c_bg"
+                        )
+                        val borderColor by animateColorAsState(
+                            targetValue = if (selected) chipAccent.copy(alpha = 0.85f) else IGDivider,
+                            animationSpec = tween(180),
+                            label = "c_border"
+                        )
+                        val textColor by animateColorAsState(
+                            targetValue = if (selected) chipAccent else IGTextSecondary,
+                            animationSpec = tween(180),
+                            label = "c_text"
+                        )
+
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(bgColor)
-                                .clickable { selectedStatusFilter = code }
+                                .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedStatusFilter = code
+                                }
                                 .padding(horizontal = 16.dp, vertical = 7.dp)
                         ) {
-                            Text(label, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = textColor)
+                            Text(
+                                text = label,
+                                fontSize = 13.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = textColor
+                            )
                         }
                     }
                 }
@@ -944,15 +981,32 @@ fun HistoryScreen(
                 ) {
                     items(mediaTypeFilters) { (code, label) ->
                         val selected = selectedMediaTypeFilter == code
-                        val chipColor = if (selected) { if (code == "ALL") IGTextPrimary else getMediaTypeColor(code) } else IGCard
-                        val chipBorder = if (selected) Color.Transparent else IGDivider
-                        val chipTextColor by animateColorAsState(if (selected) { if (code == "ALL") IGBlack else Color.White } else IGTextSecondary, tween(200), label = "mt")
+                        val typeAccent = if (code == "ALL") Color.White else getMediaTypeColor(code)
+                        val chipColor by animateColorAsState(
+                            targetValue = if (selected) typeAccent.copy(alpha = 0.22f) else IGCard,
+                            animationSpec = tween(180),
+                            label = "mt_bg"
+                        )
+                        val chipBorder by animateColorAsState(
+                            targetValue = if (selected) typeAccent.copy(alpha = 0.8f) else IGDivider,
+                            animationSpec = tween(180),
+                            label = "mt_border"
+                        )
+                        val chipTextColor by animateColorAsState(
+                            targetValue = if (selected) typeAccent else IGTextSecondary,
+                            animationSpec = tween(180),
+                            label = "mt_text"
+                        )
+
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(chipColor)
                                 .border(1.dp, chipBorder, RoundedCornerShape(16.dp))
-                                .clickable { selectedMediaTypeFilter = code }
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    selectedMediaTypeFilter = code
+                                }
                                 .padding(horizontal = 14.dp, vertical = 6.dp)
                         ) {
                             Text(
@@ -1103,21 +1157,22 @@ fun HistoryScreen(
     ) {
         Surface(
             onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 scope.launch {
                     listState.animateScrollToItem(0)
                 }
             },
             shape = CircleShape,
-            color = IGCard.copy(alpha = 0.94f),
-            border = BorderStroke(1.dp, IGDivider),
-            shadowElevation = 8.dp,
+            color = Color(0xF018181C),
+            border = BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0xFF00F2FE), Color(0xFF2563EB)))),
+            shadowElevation = 12.dp,
             modifier = Modifier.size(46.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowUp,
                     contentDescription = "Scroll to top",
-                    tint = IGTextPrimary,
+                    tint = Color(0xFF00F2FE),
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -1361,165 +1416,186 @@ private fun IGTopBar(
     var showOptionsMenu by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth().background(IGBlack).statusBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isSearchActive) {
-                TextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    placeholder = { Text("Search anime, movies, manga, manhwa...", color = IGTextTertiary, fontSize = 14.sp) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = IGCard,
-                        unfocusedContainerColor = IGCard,
-                        focusedTextColor = IGTextPrimary,
-                        unfocusedTextColor = IGTextPrimary,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = IGBlue
-                    ),
-                    leadingIcon = {
-                        if (isSearchingOnline) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = IGGradMid)
-                        } else {
-                            Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp), tint = IGTextSecondary)
-                        }
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotBlank()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(Icons.Outlined.Close, null, tint = IGTextSecondary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { onSearch() })
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Cancel",
-                    color = IGBlue,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { onSearchToggle() }
-                )
-                LaunchedEffect(Unit) { focusRequester.requestFocus() }
-            } else {
-                // Title and Logo (Guaranteed single line, never wraps vertically)
+        AnimatedContent(
+            targetState = isSearchActive,
+            transitionSpec = {
+                if (targetState) {
+                    (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 5 })
+                        .togetherWith(fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { -it / 5 })
+                } else {
+                    (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { -it / 5 })
+                        .togetherWith(fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { it / 5 })
+                }
+            },
+            label = "topbar_search_transition",
+            modifier = Modifier.fillMaxWidth()
+        ) { searchActive ->
+            if (searchActive) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FlashyAppLogo()
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        placeholder = { Text("Search anime, movies, manga, manhwa...", color = IGTextTertiary, fontSize = 14.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = IGCard,
+                            unfocusedContainerColor = IGCard,
+                            focusedTextColor = IGTextPrimary,
+                            unfocusedTextColor = IGTextPrimary,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = IGBlue
+                        ),
+                        leadingIcon = {
+                            if (isSearchingOnline) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = IGGradMid)
+                            } else {
+                                Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp), tint = IGTextSecondary)
+                            }
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotBlank()) {
+                                IconButton(onClick = { onSearchQueryChange("") }) {
+                                    Icon(Icons.Outlined.Close, null, tint = IGTextSecondary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { onSearch() })
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "SceneFinder",
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            brush = Brush.horizontalGradient(
-                                listOf(
-                                    Color(0xFF00F2FE), // Cyber Cyan
-                                    Color(0xFF38EF7D), // Emerald Neon
-                                    Color(0xFFFFFFFF)  // Pure White
-                                )
-                            )
-                        ),
-                        letterSpacing = (-0.3).sp
+                        "Cancel",
+                        color = IGBlue,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable { onSearchToggle() }
                     )
+                    LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Title and Logo (Guaranteed single line, never wraps vertically)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        FlashyAppLogo()
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "SceneFinder",
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                brush = Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF00F2FE), // Cyber Cyan
+                                        Color(0xFF38EF7D), // Emerald Neon
+                                        Color(0xFFFFFFFF)  // Pure White
+                                    )
+                                )
+                            ),
+                            letterSpacing = (-0.3).sp
+                        )
+                    }
 
-                // Merged Discover & Settings Action Button with Quick Dropdown
-                Box {
+                    // Merged Discover & Settings Action Button with Quick Dropdown
+                    Box {
+                        IconButton(
+                            onClick = { showOptionsMenu = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Tune,
+                                contentDescription = "Options & Settings",
+                                tint = IGTextPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showOptionsMenu,
+                            onDismissRequest = { showOptionsMenu = false },
+                            modifier = Modifier
+                                .background(IGCard)
+                                .border(0.5.dp, IGDivider, RoundedCornerShape(12.dp))
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.Explore, contentDescription = null, tint = Color(0xFF00F2FE), modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("Discover SceneFinder", color = IGTextPrimary, fontSize = 13.5.sp)
+                                    }
+                                },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    onNavigateToDiscover()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.Settings, contentDescription = null, tint = IGTextSecondary, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("Settings & Sync", color = IGTextPrimary, fontSize = 13.5.sp)
+                                    }
+                                },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    onNavigateToSettings()
+                                }
+                            )
+                        }
+                    }
+
+                    // Page-Wise / Scroll Toggle
                     IconButton(
-                        onClick = { showOptionsMenu = true },
+                        onClick = onTogglePageWise,
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Tune,
-                            contentDescription = "Options & Settings",
-                            tint = IGTextPrimary,
+                            imageVector = Icons.Default.AutoStories,
+                            contentDescription = if (isPageWise) "Switch to Infinite Scroll" else "Switch to Page-Wise Mode",
+                            tint = if (isPageWise) Color(0xFF00F2FE) else IGTextPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    DropdownMenu(
-                        expanded = showOptionsMenu,
-                        onDismissRequest = { showOptionsMenu = false },
-                        modifier = Modifier
-                            .background(IGCard)
-                            .border(0.5.dp, IGDivider, RoundedCornerShape(12.dp))
+                    // Library Sync Button
+                    IconButton(
+                        onClick = onSync,
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.Explore, contentDescription = null, tint = Color(0xFF00F2FE), modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(10.dp))
-                                    Text("Discover SceneFinder", color = IGTextPrimary, fontSize = 13.5.sp)
-                                }
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                onNavigateToDiscover()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.Settings, contentDescription = null, tint = IGTextSecondary, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(10.dp))
-                                    Text("Settings & Sync", color = IGTextPrimary, fontSize = 13.5.sp)
-                                }
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                onNavigateToSettings()
-                            }
-                        )
+                        if (isCloudSyncing) {
+                            CircularProgressIndicator(color = Color(0xFF00F2FE), strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                        } else {
+                            Icon(Icons.Default.Refresh, "Sync Library", tint = IGTextPrimary, modifier = Modifier.size(20.dp))
+                        }
                     }
-                }
 
-                // Page-Wise / Scroll Toggle
-                IconButton(
-                    onClick = onTogglePageWise,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoStories,
-                        contentDescription = if (isPageWise) "Switch to Infinite Scroll" else "Switch to Page-Wise Mode",
-                        tint = if (isPageWise) Color(0xFF00F2FE) else IGTextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Library Sync Button
-                IconButton(
-                    onClick = onSync,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    if (isCloudSyncing) {
-                        CircularProgressIndicator(color = Color(0xFF00F2FE), strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    } else {
-                        Icon(Icons.Default.Refresh, "Sync Library", tint = IGTextPrimary, modifier = Modifier.size(20.dp))
+                    // Search Button
+                    IconButton(
+                        onClick = onSearchToggle,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Search, "Search", tint = IGTextPrimary, modifier = Modifier.size(21.dp))
                     }
-                }
-
-                // Search Button
-                IconButton(
-                    onClick = onSearchToggle,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(Icons.Default.Search, "Search", tint = IGTextPrimary, modifier = Modifier.size(21.dp))
                 }
             }
         }
+
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(IGDivider))
     }
 }
@@ -1555,7 +1631,7 @@ private fun IGPosterCard(
         ImageRequest.Builder(context)
             .data(media.posterUrl)
             .size(360, 540)
-            .crossfade(false)
+            .crossfade(160)
             .allowHardware(true)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
@@ -1626,21 +1702,31 @@ private fun IGPosterCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Category pill badge with clear high-contrast backing
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(typeColor.copy(alpha = 0.22f))
-                            .border(0.5.dp, typeColor.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = media.mediaType.uppercase(),
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = typeColor,
-                            letterSpacing = 0.4.sp
-                        )
+                        // Category pill badge with clear high-contrast backing
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(typeColor.copy(alpha = 0.22f))
+                                .border(0.5.dp, typeColor.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                        ) {
+                            Text(
+                                text = media.mediaType.uppercase(),
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = typeColor,
+                                letterSpacing = 0.4.sp
+                            )
+                        }
+
+                        // Age Rating badge
+                        media.ageRating?.let { age ->
+                            AgeRatingBadge(rating = age, fontSize = 8.sp)
+                        }
                     }
 
                     if (ratingStr != null) {
@@ -1755,14 +1841,17 @@ private fun MediaDetailDialog(
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = IGCard,
             tonalElevation = 6.dp,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp)
+                .fillMaxWidth(0.94f)
+                .padding(horizontal = 4.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -1828,6 +1917,9 @@ private fun MediaDetailDialog(
                                     Text(" ${String.format("%.1f", it)}", fontSize = 12.sp, color = IGYellow, fontWeight = FontWeight.SemiBold)
                                 }
                             }
+                            media.ageRating?.let { age ->
+                                AgeRatingBadge(rating = age, fontSize = 9.sp)
+                            }
                             Text("• ${media.sourceService}", fontSize = 11.sp, color = IGTextTertiary)
                         }
                     }
@@ -1882,14 +1974,29 @@ private fun MediaDetailDialog(
                 ) {
                     statusOptions.forEach { (code, label, color) ->
                         val isSelected = media.userStatus == code
+                        val rowBg by animateColorAsState(
+                            targetValue = if (isSelected) color.copy(alpha = 0.18f) else IGBlack.copy(alpha = 0.45f),
+                            animationSpec = tween(200),
+                            label = "status_row_bg"
+                        )
+                        val rowBorder by animateColorAsState(
+                            targetValue = if (isSelected) color else IGDivider,
+                            animationSpec = tween(200),
+                            label = "status_row_border"
+                        )
+                        val rowTextColor by animateColorAsState(
+                            targetValue = if (isSelected) IGTextPrimary else IGTextSecondary,
+                            animationSpec = tween(200),
+                            label = "status_row_text"
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSelected) color.copy(alpha = 0.18f) else IGBlack.copy(alpha = 0.45f))
+                                .background(rowBg)
                                 .border(
                                     width = if (isSelected) 1.5.dp else 0.5.dp,
-                                    color = if (isSelected) color else IGDivider,
+                                    color = rowBorder,
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .clickable { onStatusChange(code) }
@@ -1909,10 +2016,14 @@ private fun MediaDetailDialog(
                                     label,
                                     fontSize = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) IGTextPrimary else IGTextSecondary
+                                    color = rowTextColor
                                 )
                             }
-                            if (isSelected) {
+                            AnimatedVisibility(
+                                visible = isSelected,
+                                enter = fadeIn(tween(160)) + scaleIn(tween(160)),
+                                exit = fadeOut(tween(120)) + scaleOut(tween(120))
+                            ) {
                                 Icon(Icons.Default.Check, contentDescription = "Selected", tint = color, modifier = Modifier.size(16.dp))
                             }
                         }
@@ -1938,7 +2049,7 @@ private fun MediaDetailDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.OpenInNew, null, tint = IGBlue, modifier = Modifier.size(15.dp))
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, tint = IGBlue, modifier = Modifier.size(15.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text("Open Web", color = IGBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
@@ -1982,10 +2093,21 @@ private fun IGSearchResultRow(
     onAdd: () -> Unit,
     onOpen: () -> Unit
 ) {
+    val rowInteraction = remember { MutableInteractionSource() }
+    val rowPressed by rowInteraction.collectIsPressedAsState()
+    val rowScale by animateFloatAsState(
+        targetValue = if (rowPressed) 0.97f else 1f,
+        animationSpec = tween(100),
+        label = "row_scale"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpen() }
+            .graphicsLayer { scaleX = rowScale; scaleY = rowScale }
+            .clickable(
+                interactionSource = rowInteraction,
+                indication = null
+            ) { onOpen() }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -2017,6 +2139,9 @@ private fun IGSearchResultRow(
                         Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(11.dp))
                         Text(" ${String.format("%.1f", it)}", fontSize = 12.sp, color = IGYellow)
                     }
+                }
+                media.ageRating?.let { age ->
+                    AgeRatingBadge(rating = age, fontSize = 8.5.sp)
                 }
                 Text("• ${media.sourceService}", fontSize = 12.sp, color = IGTextSecondary)
             }

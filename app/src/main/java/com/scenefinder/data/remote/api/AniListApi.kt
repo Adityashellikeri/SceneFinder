@@ -103,7 +103,8 @@ data class AniListMediaItem(
     val bannerImage: String?,
     val siteUrl: String?,
     val genres: List<String>?,
-    val countryOfOrigin: String? = null
+    val countryOfOrigin: String? = null,
+    val isAdult: Boolean? = null
 )
 
 @JsonClass(generateAdapter = true)

@@ -22,7 +22,7 @@ class SceneFinderApp : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
-            .dispatcher(kotlinx.coroutines.Dispatchers.IO.limitedParallelism(3))
+            .dispatcher(kotlinx.coroutines.Dispatchers.IO.limitedParallelism(6))
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.35)
@@ -34,7 +34,8 @@ class SceneFinderApp : Application(), ImageLoaderFactory {
                     .maxSizeBytes(300L * 1024 * 1024)
                     .build()
             }
-            .crossfade(false)
+            .crossfade(180)
+            .allowHardware(true)
             .respectCacheHeaders(false)
             .build()
     }

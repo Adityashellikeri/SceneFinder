@@ -17,12 +17,15 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -40,9 +43,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.Surface
 import com.scenefinder.ui.theme.IGDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
@@ -341,77 +349,93 @@ private fun MainAppScaffold(
         NavItem("Search",   Icons.Outlined.Search,  Icons.Filled.Search)
     )
 
+    val haptic = LocalHapticFeedback.current
+
     Scaffold(
         containerColor = IGBlack,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (selectedIndex in 0..1) {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.Black)
                         .navigationBarsPadding()
+                        .padding(horizontal = 48.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Subtle 0.5dp top border
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(0.5.dp)
-                            .background(IGDivider)
-                    )
-                    Row(
+                    Surface(
+                        shape = RoundedCornerShape(26.dp),
+                        color = Color(0xF2131316),
+                        border = BorderStroke(0.75.dp, Color(0x33FFFFFF)),
+                        shadowElevation = 12.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
-                            .padding(horizontal = 32.dp),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        navItems.forEachIndexed { index, item ->
-                            val selected = selectedIndex == index
-                            val iconScale by animateFloatAsState(
-                                targetValue = if (selected) 1.15f else 1.0f,
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                                    stiffness = Spring.StiffnessMedium
-                                ),
-                                label = "tab_scale"
-                            )
-                            val iconColor by animateColorAsState(
-                                targetValue = if (selected) IGTextPrimary else IGTextSecondary,
-                                animationSpec = tween(150),
-                                label = "tab_color"
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            navItems.forEachIndexed { index, item ->
+                                val selected = selectedIndex == index
+                                val pillBg by animateColorAsState(
+                                    targetValue = if (selected) Color(0x240095F6) else Color.Transparent,
+                                    animationSpec = tween(200),
+                                    label = "pill_bg"
+                                )
+                                val iconTint by animateColorAsState(
+                                    targetValue = if (selected) Color(0xFF00F2FE) else IGTextSecondary,
+                                    animationSpec = tween(180),
+                                    label = "tab_color"
+                                )
+                                val iconScale by animateFloatAsState(
+                                    targetValue = if (selected) 1.12f else 1.0f,
+                                    animationSpec = tween(160),
+                                    label = "tab_scale"
+                                )
 
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { navigateToTab(index) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(pillBg)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            navigateToTab(index)
+                                        },
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        imageVector = if (selected) item.selectedIcon else item.icon,
-                                        contentDescription = item.label,
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .scale(iconScale),
-                                        tint = iconColor
-                                    )
-                                    Spacer(Modifier.height(3.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .size(4.dp)
-                                            .clip(CircleShape)
-                                            .background(if (selected) IGTextPrimary else Color.Transparent)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (selected) item.selectedIcon else item.icon,
+                                            contentDescription = item.label,
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .graphicsLayer {
+                                                    scaleX = iconScale
+                                                    scaleY = iconScale
+                                                },
+                                            tint = iconTint
+                                        )
+                                        AnimatedVisibility(visible = selected) {
+                                            Text(
+                                                text = item.label,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -426,47 +450,62 @@ private fun MainAppScaffold(
                 .padding(bottom = paddingValues.calculateBottomPadding())
                 .background(IGBlack)
         ) {
-            when (selectedIndex) {
-                0 -> HistoryScreen(
-                    dao = dao,
-                    repository = repository,
-                    settings = settings,
-                    onNavigateToDiscover = { navigateToTab(2) },
-                    onNavigateToSettings = { navigateToTab(3) }
-                )
-                1 -> HistoryScreen(
-                    dao = dao,
-                    repository = repository,
-                    settings = settings,
-                    startInSearch = true,
-                    onBackToHome = {
-                        if (tabBackStack.size > 1) {
-                            tabBackStack.removeAt(tabBackStack.lastIndex)
-                        } else {
-                            navigateToTab(0)
-                        }
-                    },
-                    onNavigateToDiscover = { navigateToTab(2) },
-                    onNavigateToSettings = { navigateToTab(3) }
-                )
-                2 -> OnboardingScreen(onContinueToDashboard = {
-                    if (tabBackStack.size > 1) {
-                        tabBackStack.removeAt(tabBackStack.lastIndex)
+            AnimatedContent(
+                targetState = selectedIndex,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it / 4 } + fadeIn(tween(240)))
+                            .togetherWith(slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -it / 4 } + fadeOut(tween(180)))
                     } else {
-                        navigateToTab(0)
+                        (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it / 4 } + fadeIn(tween(240)))
+                            .togetherWith(slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { it / 4 } + fadeOut(tween(180)))
                     }
-                })
-                3 -> SettingsScreen(
-                    settings = settings,
-                    repository = repository,
-                    onBack = {
+                },
+                label = "screen_transition",
+                modifier = Modifier.fillMaxSize()
+            ) { targetIndex ->
+                when (targetIndex) {
+                    0 -> HistoryScreen(
+                        dao = dao,
+                        repository = repository,
+                        settings = settings,
+                        onNavigateToDiscover = { navigateToTab(2) },
+                        onNavigateToSettings = { navigateToTab(3) }
+                    )
+                    1 -> HistoryScreen(
+                        dao = dao,
+                        repository = repository,
+                        settings = settings,
+                        startInSearch = true,
+                        onBackToHome = {
+                            if (tabBackStack.size > 1) {
+                                tabBackStack.removeAt(tabBackStack.lastIndex)
+                            } else {
+                                navigateToTab(0)
+                            }
+                        },
+                        onNavigateToDiscover = { navigateToTab(2) },
+                        onNavigateToSettings = { navigateToTab(3) }
+                    )
+                    2 -> OnboardingScreen(onContinueToDashboard = {
                         if (tabBackStack.size > 1) {
                             tabBackStack.removeAt(tabBackStack.lastIndex)
                         } else {
                             navigateToTab(0)
                         }
-                    }
-                )
+                    })
+                    3 -> SettingsScreen(
+                        settings = settings,
+                        repository = repository,
+                        onBack = {
+                            if (tabBackStack.size > 1) {
+                                tabBackStack.removeAt(tabBackStack.lastIndex)
+                            } else {
+                                navigateToTab(0)
+                            }
+                        }
+                    )
+                }
             }
         }
     }

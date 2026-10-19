@@ -7,7 +7,7 @@ import com.scenefinder.data.local.entity.EnrichedMediaEntity
 
 @Database(
     entities = [EnrichedMediaEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

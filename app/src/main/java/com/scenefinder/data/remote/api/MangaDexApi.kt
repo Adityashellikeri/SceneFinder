@@ -36,7 +36,8 @@ data class MangaDexAttributes(
     val description: Map<String, String>?,
     val status: String?,
     val year: Int?,
-    val originalLanguage: String? = null
+    val originalLanguage: String? = null,
+    val contentRating: String? = null
 )
 
 @JsonClass(generateAdapter = true)

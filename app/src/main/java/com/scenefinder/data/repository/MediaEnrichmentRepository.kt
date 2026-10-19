@@ -38,6 +38,37 @@ class MediaEnrichmentRepository @Inject constructor(
 ) {
     companion object {
         const val DEFAULT_TMDB_API_KEY = "2c8332560e90ecdb248ff837cb019ad7"
+
+        fun resolveAgeRating(
+            isAdult: Boolean? = null,
+            genres: List<String>? = null,
+            genreIds: List<Int>? = null,
+            contentRating: String? = null,
+            mediaType: String? = null
+        ): String {
+            if (isAdult == true) return "18+"
+            if (!contentRating.isNullOrBlank()) {
+                val cr = contentRating.lowercase().trim()
+                return when {
+                    cr.contains("porn") || cr.contains("r18") || cr.contains("nc-17") || cr == "adult" -> "18+"
+                    cr.contains("erotica") || cr.contains("tv-ma") || cr == "r" || cr == "18+" -> "18+"
+                    cr.contains("suggestive") || cr.contains("tv-14") || cr == "pg-13" || cr == "16+" -> "16+"
+                    cr.contains("safe") || cr.contains("tv-pg") || cr.contains("tv-g") || cr.contains("tv-y") || cr == "pg" || cr == "g" -> "PG"
+                    else -> contentRating.uppercase()
+                }
+            }
+            if (!genres.isNullOrEmpty()) {
+                val lower = genres.map { it.lowercase() }
+                if (lower.any { it == "hentai" }) return "18+"
+                if (lower.any { it == "ecchi" || it == "horror" || it == "psychological" || it == "gore" }) return "16+"
+                if (lower.any { it == "kids" || it == "children" }) return "PG"
+            }
+            if (!genreIds.isNullOrEmpty()) {
+                if (genreIds.contains(27) || genreIds.contains(80)) return "16+"
+                if (genreIds.contains(10762) || genreIds.contains(10751)) return "PG"
+            }
+            return if (mediaType?.equals("Kids", true) == true) "PG" else "13+"
+        }
     }
     private val cacheExpirationMillis = TimeUnit.DAYS.toMillis(7)
 
@@ -80,6 +111,8 @@ class MediaEnrichmentRepository @Inject constructor(
                   title { romaji english }
                   coverImage { large }
                   averageScore
+                  genres
+                  isAdult
                 }
               }
             }
@@ -111,7 +144,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 rating = item.averageScore?.let { it / 10.0f },
                 sourceService = "AniList",
                 directWebUrl = "https://anilist.co/anime/${item.id}",
-                userStatus = "PLANNING"
+                userStatus = "PLANNING",
+                ageRating = resolveAgeRating(isAdult = item.isAdult, genres = item.genres, mediaType = type)
             )
         } ?: emptyList()
     } catch (e: Exception) {
@@ -325,7 +359,7 @@ class MediaEnrichmentRepository @Inject constructor(
                           type format countryOfOrigin status
                           episodes chapters averageScore description
                           coverImage { extraLarge large }
-                          bannerImage siteUrl genres
+                          bannerImage siteUrl genres isAdult
                         }
                       }
                     }
@@ -358,7 +392,8 @@ class MediaEnrichmentRepository @Inject constructor(
                             rating = first.averageScore?.let { it / 10.0f },
                             sourceService = "AniList",
                             directWebUrl = first.siteUrl ?: "https://anilist.co/anime/${first.id}",
-                            userStatus = "PLANNING"
+                            userStatus = "PLANNING",
+                            ageRating = resolveAgeRating(isAdult = first.isAdult, genres = first.genres, mediaType = detectedType)
                         )
                     )
                 }
@@ -398,7 +433,8 @@ class MediaEnrichmentRepository @Inject constructor(
                             rating = item.voteAverage,
                             sourceService = "TMDB",
                             directWebUrl = "https://www.themoviedb.org/${item.mediaType}/${item.id}",
-                            userStatus = "PLANNING"
+                            userStatus = "PLANNING",
+                            ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = resolvedType)
                         )
                     )
                 }
@@ -433,7 +469,8 @@ class MediaEnrichmentRepository @Inject constructor(
                             rating = null,
                             sourceService = "MangaDex",
                             directWebUrl = "https://mangadex.org/title/${item.id}",
-                            userStatus = "PLANNING"
+                            userStatus = "PLANNING",
+                            ageRating = resolveAgeRating(contentRating = item.attributes?.contentRating, mediaType = if (isManhwa) "Manhwa" else "Manga")
                         )
                     )
                 }
@@ -498,6 +535,7 @@ class MediaEnrichmentRepository @Inject constructor(
                   bannerImage
                   siteUrl
                   genres
+                  isAdult
                 }
               }
             }
@@ -530,7 +568,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 rating = first.averageScore?.let { it / 10.0f },
                 sourceService = "AniList",
                 directWebUrl = first.siteUrl ?: "https://anilist.co/anime/${first.id}",
-                userStatus = "PLANNING"
+                userStatus = "PLANNING",
+                ageRating = resolveAgeRating(isAdult = first.isAdult, genres = first.genres, mediaType = if (first.type == "MANGA") "Manga" else "Anime")
             )
         } catch (_: Exception) {
             null
@@ -578,7 +617,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 rating = first.voteAverage,
                 sourceService = "TMDB",
                 directWebUrl = "https://www.themoviedb.org/${first.mediaType}/${first.id}",
-                userStatus = "PLANNING"
+                userStatus = "PLANNING",
+                ageRating = resolveAgeRating(isAdult = first.adult, genreIds = first.genreIds, mediaType = resolvedMediaType)
             )
         } catch (_: Exception) {
             null
@@ -609,7 +649,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 rating = null,
                 sourceService = "MangaDex",
                 directWebUrl = "https://mangadex.org/title/${first.id}",
-                userStatus = "PLANNING"
+                userStatus = "PLANNING",
+                ageRating = resolveAgeRating(contentRating = first.attributes?.contentRating, mediaType = "Manga")
             )
         } catch (_: Exception) {
             null
@@ -732,7 +773,8 @@ class MediaEnrichmentRepository @Inject constructor(
                     rating = null,
                     sourceService = "trace.moe",
                     directWebUrl = "https://anilist.co/anime/${topMatch?.anilist?.id}",
-                    userStatus = "PLANNING"
+                    userStatus = "PLANNING",
+                    ageRating = "13+"
                 )
                 return entity
             }
@@ -789,6 +831,7 @@ class MediaEnrichmentRepository @Inject constructor(
                   bannerImage
                   siteUrl
                   genres
+                  isAdult
                 }
               }
             }
@@ -816,7 +859,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 rating = media.averageScore?.let { it / 10.0f },
                 sourceService = "AniList",
                 directWebUrl = media.siteUrl ?: "https://anilist.co/anime/${media.id}",
-                userStatus = "PLANNING"
+                userStatus = "PLANNING",
+                ageRating = resolveAgeRating(isAdult = media.isAdult, genres = media.genres, mediaType = if (media.type == "MANGA") "Manga" else "Anime")
             )
         } catch (_: Exception) {
             null
@@ -865,6 +909,7 @@ class MediaEnrichmentRepository @Inject constructor(
                           episodes chapters
                           siteUrl
                           genres
+                          isAdult
                         }
                       }
                     }
@@ -920,6 +965,7 @@ class MediaEnrichmentRepository @Inject constructor(
                             sourceService = "AniList",
                             directWebUrl = media.siteUrl ?: "https://anilist.co/anime/${media.id}",
                             userStatus = finalStatus,
+                            ageRating = resolveAgeRating(isAdult = media.isAdult, genres = media.genres, mediaType = detectedType),
                             cachedAt = finalCachedAt
                         )
                         entitiesToInsert.add(entity)
@@ -971,6 +1017,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
                     userStatus = existing?.userStatus ?: "PLANNING",
+                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie"),
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)
@@ -1002,6 +1049,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
                     userStatus = existing?.userStatus ?: "PLANNING",
+                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows"),
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)
@@ -1033,6 +1081,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
                     userStatus = existing?.userStatus ?: "COMPLETED",
+                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie"),
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)
@@ -1064,6 +1113,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
                     userStatus = existing?.userStatus ?: "COMPLETED",
+                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows"),
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)

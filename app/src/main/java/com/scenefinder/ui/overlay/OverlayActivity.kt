@@ -27,8 +27,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.window.Dialog
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,13 +50,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.scenefinder.data.local.entity.EnrichedMediaEntity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import com.scenefinder.ui.theme.DarkSurface
 import com.scenefinder.ui.theme.DarkSurfaceVariant
 import com.scenefinder.ui.theme.NeonAccent
 import com.scenefinder.ui.theme.NeonGreen
 import com.scenefinder.ui.theme.NeonOrange
 import com.scenefinder.ui.theme.SceneFinderTheme
+import com.scenefinder.ui.components.AgeRatingBadge
 import com.scenefinder.ui.theme.TextSecondary
 
 import android.widget.Toast
@@ -69,6 +76,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.scenefinder.data.local.dao.EnrichedMediaDao
+import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.data.prefs.AppSettings
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import dagger.hilt.android.AndroidEntryPoint
@@ -336,6 +344,10 @@ fun OverlayMediaCard(
                             )
                         }
 
+                        media.ageRating?.let { age ->
+                            AgeRatingBadge(rating = age, fontSize = 9.sp)
+                        }
+
                         media.rating?.let { score ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -440,7 +452,7 @@ fun OverlayMediaCard(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.OpenInNew,
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                         contentDescription = null,
                         tint = Color.Black,
                         modifier = Modifier.size(16.dp)

@@ -37,7 +37,9 @@ data class TmdbItem(
     @Json(name = "release_date") val releaseDate: String?,
     @Json(name = "first_air_date") val firstAirDate: String?,
     @Json(name = "vote_average") val voteAverage: Float?,
-    @Json(name = "vote_count") val voteCount: Int?
+    @Json(name = "vote_count") val voteCount: Int?,
+    val adult: Boolean? = null,
+    @Json(name = "genre_ids") val genreIds: List<Int>? = null
 ) {
     val displayTitle: String
         get() = title ?: name ?: originalTitle ?: originalName ?: "Unknown"
