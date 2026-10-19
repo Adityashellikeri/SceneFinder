@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -110,16 +111,18 @@ import javax.inject.Inject
  * Merged SceneFinder search & detail popup.
  *
  * Triggered from:
- * 1) Android text selection menu (ACTION_PROCESS_TEXT) next to Copy/Share
+ * 1) Android text selection menu (ACTION_PROCESS_TEXT)
  * 2) Direct Share sheet (ACTION_SEND)
+ * 3) Quick search / Accessibility overlay
  *
  * Features:
  * - Pre-filled, live-editable search bar with the selected text
  * - One-click re-search right inside the popup
- * - Direct unified results view (poster, rating, age rating, synopsis)
+ * - Multi-format search: searches Anime, Manga, TV Shows, and Movies concurrently!
+ * - Displays related adaptations (e.g. Manga and Netflix TV show for "One Piece")
+ * - One-tap switching between related formats
  * - Built-in Watchlist / Library management (Watching, Plan to Watch, Completed, Dropped)
  * - Direct external web links (AniList / TMDB)
- * - No secondary dialogs: complete all-in-one experience
  */
 @AndroidEntryPoint
 class TextSearchActivity : ComponentActivity() {
@@ -168,7 +171,10 @@ class TextSearchActivity : ComponentActivity() {
 private sealed class SearchState {
     object Idle : SearchState()
     data class Loading(val query: String) : SearchState()
-    data class Found(val result: EnrichedMediaEntity) : SearchState()
+    data class Found(
+        val selected: EnrichedMediaEntity,
+        val allResults: List<EnrichedMediaEntity>
+    ) : SearchState()
     data class NotFound(val query: String) : SearchState()
     data class Error(val message: String) : SearchState()
 }
@@ -187,7 +193,7 @@ private fun TextSearchPopup(
     onDismiss: () -> Unit,
     onOpenWeb: (String) -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
@@ -204,7 +210,7 @@ private fun TextSearchPopup(
     var showStatusDialog by remember { mutableStateOf(false) }
     var currentMediaForStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
 
-    // Execute search whenever activeQuery changes
+    // Execute search across Anime, Manga, TV shows, and Movies
     LaunchedEffect(activeQuery) {
         val q = activeQuery.trim()
         if (q.isBlank()) {
@@ -218,13 +224,20 @@ private fun TextSearchPopup(
                 val candidates = candidateExtractor.extractCandidates(
                     listOf(q), "Text Selection Search"
                 )
-                val result = candidates.firstNotNullOfOrNull { c ->
-                    repository.enrichCandidate(c, effectiveKey)
+                val allMatches = mutableListOf<EnrichedMediaEntity>()
+                for (c in candidates) {
+                    val related = repository.searchAllRelated(c, effectiveKey)
+                    for (r in related) {
+                        if (allMatches.none { it.id == r.id }) {
+                            allMatches.add(r)
+                        }
+                    }
                 }
-                if (result != null) {
-                    val existing = dao.getById(result.id)
+                if (allMatches.isNotEmpty()) {
+                    val top = allMatches.first()
+                    val existing = dao.getById(top.id)
                     isSaved = existing != null
-                    state = SearchState.Found(result)
+                    state = SearchState.Found(selected = top, allResults = allMatches)
                 } else {
                     state = SearchState.NotFound(q)
                 }
@@ -275,7 +288,7 @@ private fun TextSearchPopup(
                 Column(
                     modifier = Modifier
                         .padding(18.dp)
-                        .heightIn(max = 620.dp)
+                        .heightIn(max = 640.dp)
                 ) {
                     // Header Row
                     PopupHeader(onDismiss = onDismiss)
@@ -306,14 +319,27 @@ private fun TextSearchPopup(
                             is SearchState.Idle -> IdleCard()
                             is SearchState.Loading -> SearchingIndicator(s.query)
                             is SearchState.Found -> MergedResultCard(
-                                media = s.result,
+                                media = s.selected,
+                                allResults = s.allResults,
                                 isSaved = isSaved,
+                                onSelectMedia = { chosen ->
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            val existing = dao.getById(chosen.id)
+                                            isSaved = existing != null
+                                        }
+                                        val currentFound = state as? SearchState.Found
+                                        if (currentFound != null) {
+                                            state = currentFound.copy(selected = chosen)
+                                        }
+                                    }
+                                },
                                 onToggleWatchlist = {
                                     if (isSaved) {
                                         scope.launch {
                                             withContext(Dispatchers.IO) {
                                                 repository.removeFromLibrary(
-                                                    media = s.result,
+                                                    media = s.selected,
                                                     anilistToken = anilistToken,
                                                     tmdbApiKey = apiKey,
                                                     tmdbSessionId = tmdbSessionId,
@@ -323,12 +349,12 @@ private fun TextSearchPopup(
                                             isSaved = false
                                         }
                                     } else {
-                                        currentMediaForStatus = s.result
+                                        currentMediaForStatus = s.selected
                                         showStatusDialog = true
                                     }
                                 },
                                 onOpenWeb = {
-                                    s.result.directWebUrl?.let { onOpenWeb(it) }
+                                    s.selected.directWebUrl?.let { onOpenWeb(it) }
                                 },
                                 onDismiss = onDismiss
                             )
@@ -575,7 +601,7 @@ private fun PopupHeader(onDismiss: () -> Unit) {
                     color = Color.White
                 )
                 Text(
-                    text = "Instant Media Recognition",
+                    text = "Anime · Manga · Movies · TV",
                     fontSize = 11.sp,
                     color = Color(0xFF8E95B8)
                 )
@@ -671,12 +697,15 @@ private fun SearchingIndicator(query: String) {
 }
 
 /**
- * Fully merged result card with complete details and action buttons directly integrated.
+ * Fully merged result card with complete details and action buttons directly integrated,
+ * plus a list of related formats & adaptations (Manga, TV Show, Movies).
  */
 @Composable
 private fun MergedResultCard(
     media: EnrichedMediaEntity,
+    allResults: List<EnrichedMediaEntity>,
     isSaved: Boolean,
+    onSelectMedia: (EnrichedMediaEntity) -> Unit,
     onToggleWatchlist: () -> Unit,
     onOpenWeb: () -> Unit,
     onDismiss: () -> Unit
@@ -688,6 +717,7 @@ private fun MergedResultCard(
         MediaType.TV_SERIES.name,
         MediaType.TV_SHOWS.name,
         MediaType.WEB_SERIES.name,
+        "TV SHOWS",
         "TV" -> Color(0xFFFF9800)
         else -> NeonAccent
     }
@@ -889,6 +919,161 @@ private fun MergedResultCard(
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Text("Dismiss", color = Color.White, fontSize = 12.sp)
+            }
+        }
+
+        // Related Formats & Adaptations (Manga, TV Show, Movies)
+        val relatedItems = allResults.filter { it.id != media.id }
+        if (relatedItems.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(18.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Related Formats & Adaptations",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = NeonAccent
+                )
+                Text(
+                    text = "${relatedItems.size} more",
+                    fontSize = 11.sp,
+                    color = TextSecondary
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                relatedItems.forEach { item ->
+                    val itemTypeColor = when (item.mediaType.uppercase()) {
+                        "ANIME" -> Color(0xFF9C27B0)
+                        "MANGA", "MANHWA" -> Color(0xFF4CAF50)
+                        "MOVIE" -> Color(0xFF2196F3)
+                        "TV SHOWS", "TV", "TV_SERIES", "WEB SERIES" -> Color(0xFFFF9800)
+                        else -> NeonAccent
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF1B1F34))
+                            .border(1.dp, Color(0xFF2C3252), RoundedCornerShape(12.dp))
+                            .clickable { onSelectMedia(item) }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Poster thumbnail
+                        if (!item.posterUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = item.posterUrl,
+                                contentDescription = item.cleanTitle,
+                                modifier = Modifier
+                                    .size(width = 40.dp, height = 56.dp)
+                                    .clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 40.dp, height = 56.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF2A2A4A)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = item.mediaType.take(2).uppercase(),
+                                    color = itemTypeColor,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(itemTypeColor.copy(alpha = 0.2f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = item.mediaType,
+                                        color = itemTypeColor,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                item.ageRating?.let { age ->
+                                    AgeRatingBadge(rating = age, fontSize = 8.sp)
+                                }
+
+                                item.rating?.let { rawRating ->
+                                    val s = if (rawRating > 10f) rawRating / 10f else rawRating
+                                    if (s > 0f) {
+                                        Text(
+                                            text = "⭐ ${String.format("%.1f", s)}",
+                                            fontSize = 10.sp,
+                                            color = NeonOrange,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(3.dp))
+
+                            Text(
+                                text = item.cleanTitle,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            val subtitle = listOfNotNull(
+                                item.year?.toString(),
+                                item.sourceService
+                            ).joinToString(" • ")
+
+                            if (subtitle.isNotBlank()) {
+                                Text(
+                                    text = subtitle,
+                                    color = TextSecondary,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF29304F))
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Switch ›",
+                                color = NeonAccent,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         }
     }

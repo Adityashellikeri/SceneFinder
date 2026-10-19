@@ -619,6 +619,88 @@ class MediaEnrichmentRepository @Inject constructor(
         return enriched
     }
 
+    /**
+     * Searches across all platforms (AniList Anime, AniList Manga, TMDB TV Shows, TMDB Movies)
+     * concurrently to return all related adaptations and formats for a title.
+     * E.g. searching "One Piece" returns its Anime, Manga, and Netflix TV Show!
+     */
+    suspend fun searchAllRelated(
+        candidate: MediaMatchCandidate,
+        tmdbApiKey: String = ""
+    ): List<EnrichedMediaEntity> = coroutineScope {
+        val effectiveKey = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+
+        val animeDeferred = async { searchAniList(candidate, "ANIME") }
+        val mangaDeferred = async { searchAniList(candidate, "MANGA") }
+        val tmdbDeferred = async { searchTmdbMultiList(candidate, effectiveKey) }
+
+        val anime = animeDeferred.await()
+        val manga = mangaDeferred.await()
+        val tmdbList = tmdbDeferred.await()
+
+        val results = mutableListOf<EnrichedMediaEntity>()
+        if (anime != null) results.add(anime)
+        if (manga != null) results.add(manga)
+        for (item in tmdbList) {
+            if (results.none { it.id == item.id || (it.mediaType == item.mediaType && it.cleanTitle.equals(item.cleanTitle, ignoreCase = true)) }) {
+                results.add(item)
+            }
+        }
+        results
+    }
+
+    private suspend fun searchTmdbMultiList(
+        candidate: MediaMatchCandidate,
+        apiKey: String
+    ): List<EnrichedMediaEntity> {
+        val effectiveKey = apiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+        return try {
+            if (candidate.cleanTitle.lowercase().contains("google")) return emptyList()
+            val response = tmdbApi.searchMulti(candidate.cleanTitle, effectiveKey)
+            val filtered = response.results?.filter {
+                (it.mediaType == "movie" || it.mediaType == "tv") &&
+                        !it.displayTitle.lowercase().contains("google") &&
+                        !com.scenefinder.domain.parser.HeuristicCleaner.isJunkText(it.displayTitle)
+            }?.take(3).orEmpty()
+
+            filtered.map { item ->
+                val isMovie = item.mediaType == "movie"
+                val displayTitle = item.displayTitle
+                val year = (item.releaseDate ?: item.firstAirDate)?.take(4)?.toIntOrNull() ?: candidate.year
+                val resolvedMediaType = when {
+                    isMovie -> "Movie"
+                    candidate.mediaType == MediaType.WEB_SERIES -> "Web Series"
+                    else -> "TV Shows"
+                }
+                val directRating = fetchTmdbAgeRating(item.id, isMovie = isMovie, apiKey = effectiveKey)
+                val finalAgeRating = directRating ?: resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = resolvedMediaType)
+
+                EnrichedMediaEntity(
+                    id = "tmdb_${item.mediaType}_${item.id}",
+                    searchKey = candidate.cleanTitle.trim().lowercase(),
+                    cleanTitle = displayTitle,
+                    englishTitle = displayTitle,
+                    originalTitle = item.originalTitle ?: item.originalName,
+                    mediaType = resolvedMediaType,
+                    year = year,
+                    season = candidate.season,
+                    episode = candidate.episode,
+                    chapter = null,
+                    overview = item.overview,
+                    posterUrl = item.fullPosterUrl,
+                    bannerUrl = item.fullBackdropUrl,
+                    rating = item.voteAverage,
+                    sourceService = "TMDB",
+                    directWebUrl = "https://www.themoviedb.org/${item.mediaType}/${item.id}",
+                    userStatus = "PLANNING",
+                    ageRating = finalAgeRating
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private suspend fun searchAniList(candidate: MediaMatchCandidate, typeFilter: String?): EnrichedMediaEntity? {
         val query = """
             query (${"$"}search: String, ${"$"}type: MediaType) {
