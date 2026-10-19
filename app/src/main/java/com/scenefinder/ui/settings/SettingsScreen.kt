@@ -88,6 +88,8 @@ import com.scenefinder.ui.theme.IGTextPrimary
 import com.scenefinder.ui.theme.IGTextSecondary
 import com.scenefinder.ui.theme.IGTextTertiary
 import com.scenefinder.ui.theme.LocalAppThemeColors
+import com.scenefinder.ui.theme.EasterEggType
+import com.scenefinder.ui.theme.ThemeEasterEggDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -124,6 +126,7 @@ fun SettingsScreen(
     var isSyncing by remember { mutableStateOf(false) }
     var tmdbLoginPending by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var activeEasterEgg by remember { mutableStateOf<EasterEggType?>(null) }
 
     val isAnilistConnected = currentToken.isNotBlank()
     val isTmdbConnected = tmdbSessionId.isNotBlank() && tmdbAccountId >= 0
@@ -917,12 +920,34 @@ fun SettingsScreen(
                                 )
                             }
                             if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = "Selected",
-                                    tint = tc.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(tc.primary.copy(alpha = 0.2f))
+                                            .border(1.dp, tc.primary, RoundedCornerShape(6.dp))
+                                            .clickable {
+                                                activeEasterEgg = when (theme) {
+                                                    AppTheme.CYBERPUNK_2077 -> EasterEggType.CyberpunkRelic
+                                                    AppTheme.IRON_MAN       -> EasterEggType.IronManProtocol
+                                                    AppTheme.NEO_BRUTALISM  -> EasterEggType.NeoBrutalistOverdrive
+                                                    AppTheme.DARK_MINIMAL   -> EasterEggType.OnePieceGear5
+                                                }
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text("🎁 Easter Egg", fontSize = 10.sp, fontWeight = FontWeight.Black, color = tc.primary)
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = tc.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1000,6 +1025,10 @@ fun SettingsScreen(
             containerColor = IGCard,
             shape = RoundedCornerShape(16.dp)
         )
+    }
+
+    activeEasterEgg?.let { egg ->
+        ThemeEasterEggDialog(egg = egg, onDismiss = { activeEasterEgg = null })
     }
 }
 

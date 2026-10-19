@@ -120,6 +120,8 @@ import com.scenefinder.ui.theme.CyberpunkYellow
 import com.scenefinder.ui.theme.CyberpunkCyan
 import com.scenefinder.ui.theme.IronManGold
 import com.scenefinder.ui.theme.IronManBlueBright
+import com.scenefinder.ui.theme.EasterEggType
+import com.scenefinder.ui.theme.ThemeEasterEggDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -274,6 +276,9 @@ private fun TextSearchPopup(
         contentAlignment = Alignment.BottomCenter
     ) {
         val tc = LocalAppThemeColors.current
+        var activeEasterEgg by remember { mutableStateOf<EasterEggType?>(null) }
+        var headerTapCount by remember { mutableStateOf(0) }
+
         AnimatedVisibility(
             visible = true,
             enter = slideInVertically(
@@ -306,8 +311,21 @@ private fun TextSearchPopup(
                         .padding(18.dp)
                         .heightIn(max = 640.dp)
                 ) {
-                    // Brutal Header
-                    BrutalPopupHeader(onDismiss = onDismiss)
+                    // Brutal Header with secret triple-tap easter egg
+                    BrutalPopupHeader(
+                        onDismiss = onDismiss,
+                        onBadgeClick = {
+                            headerTapCount++
+                            if (headerTapCount >= 3) {
+                                headerTapCount = 0
+                                activeEasterEgg = when {
+                                    tc.isCyberpunk -> EasterEggType.CyberpunkRelic
+                                    tc.isIronMan   -> EasterEggType.IronManProtocol
+                                    else           -> EasterEggType.NeoBrutalistOverdrive
+                                }
+                            }
+                        }
+                    )
 
                     Spacer(modifier = Modifier.height(14.dp))
 
@@ -316,12 +334,51 @@ private fun TextSearchPopup(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
                         onSearch = {
+                            val detected = EasterEggType.detectFromQuery(searchQuery)
+                            if (detected != null) {
+                                activeEasterEgg = detected
+                            }
                             if (searchQuery.trim().isNotBlank()) {
                                 focusManager.clearFocus()
                                 activeQuery = searchQuery.trim()
                             }
                         }
                     )
+
+                    // Secret Easter Egg Banner if keyword is detected
+                    val detectedEgg = EasterEggType.detectFromQuery(searchQuery)
+                    if (detectedEgg != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(tc.primary.copy(alpha = 0.18f))
+                                .border(1.5.dp, tc.primary, RoundedCornerShape(8.dp))
+                                .clickable { activeEasterEgg = detectedEgg }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "🎁", fontSize = 14.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "SECRET EASTER EGG UNLOCKED!",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = tc.primary,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Text(
+                                text = "TAP TO VIEW →",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = tc.textPrimary
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
@@ -482,6 +539,10 @@ private fun TextSearchPopup(
                 }
             }
         }
+
+        activeEasterEgg?.let { egg ->
+            ThemeEasterEggDialog(egg = egg, onDismiss = { activeEasterEgg = null })
+        }
     }
 }
 
@@ -577,7 +638,10 @@ private fun BrutalSearchBar(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun BrutalPopupHeader(onDismiss: () -> Unit) {
+private fun BrutalPopupHeader(
+    onDismiss: () -> Unit,
+    onBadgeClick: (() -> Unit)? = null
+) {
     val tc = LocalAppThemeColors.current
     val headerLabel = when {
         tc.isCyberpunk -> "[ SCENEFINDER.HUD ]"
@@ -595,12 +659,19 @@ private fun BrutalPopupHeader(onDismiss: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            BrutalBadge(
-                text = headerLabel,
-                backgroundColor = tc.primary,
-                textColor = tc.textInverse,
-                fontSize = 11.sp
-            )
+            Box(
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onBadgeClick?.invoke() }
+            ) {
+                BrutalBadge(
+                    text = headerLabel,
+                    backgroundColor = tc.primary,
+                    textColor = tc.textInverse,
+                    fontSize = 11.sp
+                )
+            }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = subLabel,
