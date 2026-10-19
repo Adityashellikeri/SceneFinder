@@ -7,6 +7,7 @@ import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.data.remote.api.AniListApi
 import com.scenefinder.data.remote.api.AniListGraphQLRequest
 import com.scenefinder.data.remote.api.AniListOAuthApi
+import com.scenefinder.data.remote.api.AniListTag
 import com.scenefinder.data.remote.api.MangaDexApi
 import com.scenefinder.data.remote.api.TmdbAccountApi
 import com.scenefinder.data.remote.api.TmdbApi
@@ -37,7 +38,37 @@ class MediaEnrichmentRepository @Inject constructor(
     private val traceMoeApi: TraceMoeApi
 ) {
     companion object {
-        const val DEFAULT_TMDB_API_KEY = "2c8332560e90ecdb248ff837cb019ad7"
+        const val DEFAULT_TMDB_API_KEY = "c904da47044dae75c247aa2a6e93ad95"
+
+        fun resolveAniListAgeRating(
+            isAdult: Boolean? = null,
+            genres: List<String>? = null,
+            tags: List<AniListTag>? = null,
+            mediaType: String? = null
+        ): String {
+            if (isAdult == true) return "18+"
+            if (tags?.any { it.isAdult == true } == true) return "18+"
+            if (!genres.isNullOrEmpty()) {
+                val lower = genres.map { it.lowercase() }
+                if (lower.any { it == "hentai" || it == "ecchi" }) return "18+"
+            }
+            val matureTags = setOf(
+                "nudity", "sexual content", "ecchi", "gore", "violence",
+                "torture", "cannibalism", "rape", "harem", "erotica", "sadism"
+            )
+            val hasMatureTag = tags?.any { tag ->
+                val nameLower = tag.name?.lowercase() ?: ""
+                matureTags.contains(nameLower) && (tag.rank ?: 0) >= 30
+            } == true
+            if (hasMatureTag) return "18+"
+
+            if (!genres.isNullOrEmpty()) {
+                val lower = genres.map { it.lowercase() }
+                if (lower.any { it == "horror" || it == "psychological" }) return "16+"
+                if (lower.any { it == "kids" || it == "children" }) return "PG"
+            }
+            return if (mediaType?.equals("Kids", true) == true) "PG" else "13+"
+        }
 
         fun resolveAgeRating(
             isAdult: Boolean? = null,
@@ -50,17 +81,17 @@ class MediaEnrichmentRepository @Inject constructor(
             if (!contentRating.isNullOrBlank()) {
                 val cr = contentRating.lowercase().trim()
                 return when {
-                    cr.contains("porn") || cr.contains("r18") || cr.contains("nc-17") || cr == "adult" -> "18+"
-                    cr.contains("erotica") || cr.contains("tv-ma") || cr == "r" || cr == "18+" -> "18+"
-                    cr.contains("suggestive") || cr.contains("tv-14") || cr == "pg-13" || cr == "16+" -> "16+"
+                    cr.contains("porn") || cr.contains("r18") || cr.contains("nc-17") || cr == "adult" || cr == "tv-ma" -> "18+"
+                    cr.contains("erotica") || cr.contains("tv-14") || cr == "r" || cr == "18+" || cr == "16+" || cr == "15" -> "16+"
+                    cr.contains("suggestive") || cr.contains("pg-13") || cr == "12" || cr == "13" -> "13+"
                     cr.contains("safe") || cr.contains("tv-pg") || cr.contains("tv-g") || cr.contains("tv-y") || cr == "pg" || cr == "g" -> "PG"
                     else -> contentRating.uppercase()
                 }
             }
             if (!genres.isNullOrEmpty()) {
                 val lower = genres.map { it.lowercase() }
-                if (lower.any { it == "hentai" }) return "18+"
-                if (lower.any { it == "ecchi" || it == "horror" || it == "psychological" || it == "gore" }) return "16+"
+                if (lower.any { it == "hentai" || it == "ecchi" }) return "18+"
+                if (lower.any { it == "horror" || it == "psychological" || it == "gore" }) return "16+"
                 if (lower.any { it == "kids" || it == "children" }) return "PG"
             }
             if (!genreIds.isNullOrEmpty()) {
@@ -78,6 +109,80 @@ class MediaEnrichmentRepository @Inject constructor(
 
     suspend fun clearAllHistory() {
         dao.clearAll()
+    }
+
+    /** Direct API fetch for TMDB official age certification (Movies & TV). */
+    suspend fun fetchTmdbAgeRating(tmdbId: Int, isMovie: Boolean, apiKey: String): String? {
+        val effectiveKey = apiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+        return try {
+            if (isMovie) {
+                val resp = tmdbApi.getMovieReleaseDates(tmdbId, effectiveKey)
+                val us = resp.results?.firstOrNull { it.iso3166_1.equals("US", true) }
+                val usCerts = us?.releaseDates?.mapNotNull { it.certification?.trim()?.uppercase() }?.filter { it.isNotEmpty() }.orEmpty()
+
+                for (c in usCerts) {
+                    if (c == "R" || c == "NC-17" || c == "18+" || c == "18" || c == "X") return "18+"
+                    if (c == "PG-13" || c == "14") return "13+"
+                    if (c == "PG") return "PG"
+                    if (c == "G") return "All"
+                }
+
+                val allCerts = resp.results?.flatMap { it.releaseDates.orEmpty() }?.mapNotNull { it.certification?.trim()?.uppercase() }?.filter { it.isNotEmpty() }.orEmpty()
+                if (allCerts.any { it == "18" || it == "18+" || it == "R18" || it == "R18+" || it == "A" || it == "R" || it == "NC-17" || it == "R21" }) return "18+"
+                if (allCerts.any { it == "15" || it == "16" || it == "16+" || it == "MA 15+" || it == "MA15+" || it == "R15+" }) return "16+"
+                if (allCerts.any { it == "12" || it == "12+" || it == "13" || it == "PG-13" || it == "14" }) return "13+"
+                if (allCerts.any { it == "PG" || it == "G" || it == "U" || it == "ALL" }) return "PG"
+                null
+            } else {
+                val resp = tmdbApi.getTvContentRatings(tmdbId, effectiveKey)
+                val us = resp.results?.firstOrNull { it.iso3166_1.equals("US", true) }?.rating?.trim()?.uppercase()
+                if (!us.isNullOrBlank()) {
+                    if (us == "TV-MA" || us == "18+" || us == "18" || us == "R") return "18+"
+                    if (us == "TV-14") return "16+"
+                    if (us == "TV-PG") return "PG"
+                    if (us == "TV-G" || us == "TV-Y" || us == "TV-Y7") return "All"
+                }
+                val allRatings = resp.results?.mapNotNull { it.rating?.trim()?.uppercase() }?.filter { it.isNotEmpty() }.orEmpty()
+                if (allRatings.any { it == "TV-MA" || it == "18" || it == "18+" || it == "19" || it == "R21" || it == "A" || it == "R" || it == "NC-17" }) return "18+"
+                if (allRatings.any { it == "TV-14" || it == "15" || it == "16" || it == "16+" || it == "MA 15+" || it == "MA15+" }) return "16+"
+                if (allRatings.any { it == "12" || it == "12+" || it == "13" || it == "PG-13" }) return "13+"
+                if (allRatings.any { it == "TV-PG" || it == "PG" || it == "TV-G" || it == "G" || it == "U" || it == "TV-Y" || it == "TV-Y7" }) return "PG"
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Background refresh to update all library items with accurate direct API age ratings. */
+    suspend fun refreshAllAgeRatings(tmdbApiKey: String = "") = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val items = dao.getAllList()
+        val effectiveKey = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+        for (item in items) {
+            try {
+                val updatedRating = when {
+                    item.id.startsWith("tmdb_movie_") -> {
+                        val tmdbId = item.id.removePrefix("tmdb_movie_").toIntOrNull()
+                        if (tmdbId != null) fetchTmdbAgeRating(tmdbId, isMovie = true, effectiveKey) else null
+                    }
+                    item.id.startsWith("tmdb_tv_") -> {
+                        val tmdbId = item.id.removePrefix("tmdb_tv_").toIntOrNull()
+                        if (tmdbId != null) fetchTmdbAgeRating(tmdbId, isMovie = false, effectiveKey) else null
+                    }
+                    item.id.startsWith("anilist_") -> {
+                        val anilistId = item.id.substringAfterLast("_").toIntOrNull()
+                        if (anilistId != null) {
+                            val detailed = searchAniListById(anilistId)
+                            detailed?.ageRating
+                        } else null
+                    }
+                    else -> null
+                }
+                if (!updatedRating.isNullOrBlank() && updatedRating != item.ageRating) {
+                    dao.updateAgeRating(item.id, updatedRating)
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     /** Exchange an AniList OAuth authorisation code for an access token. */
@@ -113,6 +218,7 @@ class MediaEnrichmentRepository @Inject constructor(
                   averageScore
                   genres
                   isAdult
+                  tags { name isAdult rank }
                 }
               }
             }
@@ -145,7 +251,7 @@ class MediaEnrichmentRepository @Inject constructor(
                 sourceService = "AniList",
                 directWebUrl = "https://anilist.co/anime/${item.id}",
                 userStatus = "PLANNING",
-                ageRating = resolveAgeRating(isAdult = item.isAdult, genres = item.genres, mediaType = type)
+                ageRating = resolveAniListAgeRating(isAdult = item.isAdult, genres = item.genres, tags = item.tags, mediaType = type)
             )
         } ?: emptyList()
     } catch (e: Exception) {
@@ -360,6 +466,7 @@ class MediaEnrichmentRepository @Inject constructor(
                           episodes chapters averageScore description
                           coverImage { extraLarge large }
                           bannerImage siteUrl genres isAdult
+                          tags { name isAdult rank }
                         }
                       }
                     }
@@ -393,7 +500,7 @@ class MediaEnrichmentRepository @Inject constructor(
                             sourceService = "AniList",
                             directWebUrl = first.siteUrl ?: "https://anilist.co/anime/${first.id}",
                             userStatus = "PLANNING",
-                            ageRating = resolveAgeRating(isAdult = first.isAdult, genres = first.genres, mediaType = detectedType)
+                            ageRating = resolveAniListAgeRating(isAdult = first.isAdult, genres = first.genres, tags = first.tags, mediaType = detectedType)
                         )
                     )
                 }
@@ -415,6 +522,8 @@ class MediaEnrichmentRepository @Inject constructor(
                         isMovie -> "Movie"
                         else -> "TV Shows"
                     }
+                    val directRating = fetchTmdbAgeRating(item.id, isMovie = isMovie, apiKey = effectiveTmdbKey)
+                    val tmdbRating = directRating ?: resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = resolvedType)
                     list.add(
                         EnrichedMediaEntity(
                             id = "tmdb_${item.mediaType}_${item.id}",
@@ -434,7 +543,7 @@ class MediaEnrichmentRepository @Inject constructor(
                             sourceService = "TMDB",
                             directWebUrl = "https://www.themoviedb.org/${item.mediaType}/${item.id}",
                             userStatus = "PLANNING",
-                            ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = resolvedType)
+                            ageRating = tmdbRating
                         )
                     )
                 }
@@ -536,6 +645,7 @@ class MediaEnrichmentRepository @Inject constructor(
                   siteUrl
                   genres
                   isAdult
+                  tags { name isAdult rank }
                 }
               }
             }
@@ -569,7 +679,7 @@ class MediaEnrichmentRepository @Inject constructor(
                 sourceService = "AniList",
                 directWebUrl = first.siteUrl ?: "https://anilist.co/anime/${first.id}",
                 userStatus = "PLANNING",
-                ageRating = resolveAgeRating(isAdult = first.isAdult, genres = first.genres, mediaType = if (first.type == "MANGA") "Manga" else "Anime")
+                ageRating = resolveAniListAgeRating(isAdult = first.isAdult, genres = first.genres, tags = first.tags, mediaType = if (first.type == "MANGA") "Manga" else "Anime")
             )
         } catch (_: Exception) {
             null
@@ -600,6 +710,9 @@ class MediaEnrichmentRepository @Inject constructor(
                 else -> "TV Shows"
             }
 
+            val directRating = fetchTmdbAgeRating(first.id, isMovie = isMovie, apiKey = effectiveKey)
+            val finalAgeRating = directRating ?: resolveAgeRating(isAdult = first.adult, genreIds = first.genreIds, mediaType = resolvedMediaType)
+
             EnrichedMediaEntity(
                 id = "tmdb_${first.mediaType}_${first.id}",
                 searchKey = candidate.cleanTitle.trim().lowercase(),
@@ -618,7 +731,7 @@ class MediaEnrichmentRepository @Inject constructor(
                 sourceService = "TMDB",
                 directWebUrl = "https://www.themoviedb.org/${first.mediaType}/${first.id}",
                 userStatus = "PLANNING",
-                ageRating = resolveAgeRating(isAdult = first.adult, genreIds = first.genreIds, mediaType = resolvedMediaType)
+                ageRating = finalAgeRating
             )
         } catch (_: Exception) {
             null
@@ -832,6 +945,7 @@ class MediaEnrichmentRepository @Inject constructor(
                   siteUrl
                   genres
                   isAdult
+                  tags { name isAdult rank }
                 }
               }
             }
@@ -860,7 +974,7 @@ class MediaEnrichmentRepository @Inject constructor(
                 sourceService = "AniList",
                 directWebUrl = media.siteUrl ?: "https://anilist.co/anime/${media.id}",
                 userStatus = "PLANNING",
-                ageRating = resolveAgeRating(isAdult = media.isAdult, genres = media.genres, mediaType = if (media.type == "MANGA") "Manga" else "Anime")
+                ageRating = resolveAniListAgeRating(isAdult = media.isAdult, genres = media.genres, tags = media.tags, mediaType = if (media.type == "MANGA") "Manga" else "Anime")
             )
         } catch (_: Exception) {
             null
@@ -910,6 +1024,7 @@ class MediaEnrichmentRepository @Inject constructor(
                           siteUrl
                           genres
                           isAdult
+                          tags { name isAdult rank }
                         }
                       }
                     }
@@ -965,7 +1080,7 @@ class MediaEnrichmentRepository @Inject constructor(
                             sourceService = "AniList",
                             directWebUrl = media.siteUrl ?: "https://anilist.co/anime/${media.id}",
                             userStatus = finalStatus,
-                            ageRating = resolveAgeRating(isAdult = media.isAdult, genres = media.genres, mediaType = detectedType),
+                            ageRating = resolveAniListAgeRating(isAdult = media.isAdult, genres = media.genres, tags = media.tags, mediaType = detectedType),
                             cachedAt = finalCachedAt
                         )
                         entitiesToInsert.add(entity)
@@ -1001,6 +1116,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 val year = item.releaseDate?.take(4)?.toIntOrNull()
                 val entityId = "tmdb_movie_${item.id}"
                 val existing = dao.getById(entityId)
+                val directRating = fetchTmdbAgeRating(item.id, isMovie = true, apiKey = apiKey)
+                val ageRating = directRating ?: resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie")
                 val entity = EnrichedMediaEntity(
                     id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
@@ -1017,7 +1134,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
                     userStatus = existing?.userStatus ?: "PLANNING",
-                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie"),
+                    ageRating = ageRating,
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)
@@ -1033,6 +1150,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 val year = item.firstAirDate?.take(4)?.toIntOrNull()
                 val entityId = "tmdb_tv_${item.id}"
                 val existing = dao.getById(entityId)
+                val directRating = fetchTmdbAgeRating(item.id, isMovie = false, apiKey = apiKey)
+                val ageRating = directRating ?: resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows")
                 val entity = EnrichedMediaEntity(
                     id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
@@ -1049,7 +1168,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
                     userStatus = existing?.userStatus ?: "PLANNING",
-                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows"),
+                    ageRating = ageRating,
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)
@@ -1065,6 +1184,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 val year = item.releaseDate?.take(4)?.toIntOrNull()
                 val entityId = "tmdb_movie_${item.id}"
                 val existing = dao.getById(entityId)
+                val directRating = fetchTmdbAgeRating(item.id, isMovie = true, apiKey = apiKey)
+                val ageRating = directRating ?: resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie")
                 val entity = EnrichedMediaEntity(
                     id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
@@ -1081,7 +1202,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
                     userStatus = existing?.userStatus ?: "COMPLETED",
-                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie"),
+                    ageRating = ageRating,
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)
@@ -1097,6 +1218,8 @@ class MediaEnrichmentRepository @Inject constructor(
                 val year = item.firstAirDate?.take(4)?.toIntOrNull()
                 val entityId = "tmdb_tv_${item.id}"
                 val existing = dao.getById(entityId)
+                val directRating = fetchTmdbAgeRating(item.id, isMovie = false, apiKey = apiKey)
+                val ageRating = directRating ?: resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows")
                 val entity = EnrichedMediaEntity(
                     id = entityId,
                     searchKey = item.displayTitle.trim().lowercase(),
@@ -1113,7 +1236,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     sourceService = "TMDB",
                     directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
                     userStatus = existing?.userStatus ?: "COMPLETED",
-                    ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows"),
+                    ageRating = ageRating,
                     cachedAt = existing?.cachedAt ?: System.currentTimeMillis()
                 )
                 entitiesToInsert.add(entity)

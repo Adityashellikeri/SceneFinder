@@ -3,6 +3,7 @@ package com.scenefinder.data.remote.api
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface TmdbApi {
@@ -14,7 +15,49 @@ interface TmdbApi {
         @Query("include_adult") includeAdult: Boolean = false,
         @Query("language") language: String = "en-US"
     ): TmdbSearchResponse
+
+    @GET("3/movie/{movie_id}/release_dates")
+    suspend fun getMovieReleaseDates(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbMovieReleaseDatesResponse
+
+    @GET("3/tv/{tv_id}/content_ratings")
+    suspend fun getTvContentRatings(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbTvContentRatingsResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class TmdbMovieReleaseDatesResponse(
+    val id: Int?,
+    val results: List<TmdbCountryReleaseDates>?
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCountryReleaseDates(
+    @Json(name = "iso_3166_1") val iso3166_1: String?,
+    @Json(name = "release_dates") val releaseDates: List<TmdbReleaseDateItem>?
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbReleaseDateItem(
+    val certification: String?,
+    val type: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbTvContentRatingsResponse(
+    val id: Int?,
+    val results: List<TmdbCountryContentRating>?
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCountryContentRating(
+    @Json(name = "iso_3166_1") val iso3166_1: String?,
+    val rating: String?
+)
 
 @JsonClass(generateAdapter = true)
 data class TmdbSearchResponse(

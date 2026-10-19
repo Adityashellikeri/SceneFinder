@@ -27,6 +27,12 @@ interface EnrichedMediaDao {
     @Query("SELECT * FROM enriched_media ORDER BY cachedAt DESC LIMIT 50")
     fun getRecentHistory(): Flow<List<EnrichedMediaEntity>>
 
+    @Query("SELECT * FROM enriched_media")
+    suspend fun getAllList(): List<EnrichedMediaEntity>
+
+    @Query("UPDATE enriched_media SET ageRating = :ageRating WHERE id = :id")
+    suspend fun updateAgeRating(id: String, ageRating: String)
+
     @Query("UPDATE enriched_media SET userStatus = :status, cachedAt = :cachedAt WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, cachedAt: Long = System.currentTimeMillis())
 

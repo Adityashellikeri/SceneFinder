@@ -426,6 +426,14 @@ fun HistoryScreen(
         if (startInSearch) isSearchBarActive = true
     }
 
+    // Auto-refresh and backfill age ratings directly from APIs for any existing library items
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val effectiveKey = apiKey.ifBlank { MediaEnrichmentRepository.DEFAULT_TMDB_API_KEY }
+            repository.refreshAllAgeRatings(effectiveKey)
+        }
+    }
+
     // Predictive live search as the user types (with 280ms debounce)
     LaunchedEffect(searchQuery) {
         val query = searchQuery.trim()
