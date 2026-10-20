@@ -1,8 +1,16 @@
 package com.scenefinder.ui.home
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +39,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -38,16 +47,22 @@ import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -136,26 +151,10 @@ fun HomeScreen(
     var topMovies by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
     var topTv by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var trackingDialogMedia by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var trackingTotalEpisodes by remember { mutableStateOf<Int?>(null) }
     var trackingTotalChapters by remember { mutableStateOf<Int?>(null) }
-
-    val handleAddToLibrary: (EnrichedMediaEntity) -> Unit = { item ->
-        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        scope.launch(Dispatchers.IO) {
-            val initialItem = item.copy(userStatus = "PLANNING")
-            repository.saveToLibrary(
-                initialItem,
-                anilistToken,
-                apiKey,
-                tmdbSessionId,
-                tmdbAccountId
-            )
-            launch(Dispatchers.Main) {
-                Toast.makeText(context, "Added to Library", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     val handleOpenTracking: (EnrichedMediaEntity) -> Unit = { item ->
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -209,6 +208,72 @@ fun HomeScreen(
                 }
                 val verb = if (isManga) "Read" else "Watched"
                 Toast.makeText(context, "Marked as $verb ($countText) & Synced!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Instead of immediately saving as PLANNING, opens the rich Library Popup Dialog!
+    val handleAddToLibrary: (EnrichedMediaEntity) -> Unit = { item ->
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        selectedMediaForDetail = findMatchingLibraryEntry(item) ?: item
+    }
+
+    val handleStatusChange: (EnrichedMediaEntity, String) -> Unit = { media, newStatus ->
+        selectedMediaForDetail = null
+        if (newStatus == "CURRENT") {
+            handleOpenTracking(media.copy(userStatus = "CURRENT"))
+        }
+        if (newStatus == "COMPLETED") {
+            handleMarkWatchedOrRead(media)
+        } else {
+            scope.launch(Dispatchers.IO) {
+                val updated = media.copy(
+                    userStatus = newStatus,
+                    cachedAt = System.currentTimeMillis()
+                )
+                val synced = repository.saveToLibrary(
+                    updated,
+                    anilistToken,
+                    apiKey,
+                    tmdbSessionId,
+                    tmdbAccountId
+                )
+                repository.updateMediaStatus(
+                    media = updated,
+                    newStatus = newStatus,
+                    anilistToken = anilistToken,
+                    tmdbApiKey = apiKey,
+                    tmdbSessionId = tmdbSessionId,
+                    tmdbAccountId = tmdbAccountId
+                )
+                launch(Dispatchers.Main) {
+                    val isRead = media.mediaType.equals("Manga", true) || media.mediaType.equals("Manhwa", true)
+                    val label = when (newStatus) {
+                        "CURRENT" -> if (isRead) "Reading" else "Watching"
+                        "COMPLETED" -> "Completed"
+                        "DROPPED" -> "Dropped"
+                        else -> if (isRead) "Plan to Read" else "Plan to Watch"
+                    }
+                    val isAnime = media.mediaType.equals("Anime", true) || media.mediaType.equals("Manga", true)
+                    val target = if (isAnime) "AniList" else "TMDB"
+                    val msg = if (synced) "Added as $label & synced to $target!" else "Saved as $label"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val handleRemoveFromLibrary: (EnrichedMediaEntity) -> Unit = { media ->
+        scope.launch(Dispatchers.IO) {
+            repository.removeFromLibrary(
+                media = media,
+                anilistToken = anilistToken,
+                tmdbApiKey = apiKey,
+                tmdbSessionId = tmdbSessionId,
+                tmdbAccountId = tmdbAccountId
+            )
+            launch(Dispatchers.Main) {
+                Toast.makeText(context, "Removed from Library", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -448,24 +513,13 @@ fun HomeScreen(
                                     libraryMatch = libraryEntry,
                                     isSaved = isSaved,
                                     isDark = colors.isDark,
+                                    onCardClick = { selectedMediaForDetail = effectiveItem },
                                     onAddToLibrary = { handleAddToLibrary(effectiveItem) },
                                     onWatching = { handleOpenTracking(effectiveItem) },
                                     onMarkWatchedOrRead = { handleMarkWatchedOrRead(effectiveItem) },
                                     onToggleLibrary = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        scope.launch(Dispatchers.IO) {
-                                            if (isSaved) {
-                                                repository.removeFromLibrary(
-                                                    effectiveItem,
-                                                    anilistToken,
-                                                    apiKey,
-                                                    tmdbSessionId,
-                                                    tmdbAccountId
-                                                )
-                                            } else {
-                                                handleAddToLibrary(effectiveItem)
-                                            }
-                                        }
+                                        handleAddToLibrary(effectiveItem)
                                     }
                                 )
                             }
@@ -488,6 +542,7 @@ fun HomeScreen(
                             items = topAnime,
                             libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
+                            onCardClick = { selectedMediaForDetail = it },
                             onAddToLibrary = handleAddToLibrary,
                             onWatchingClick = handleOpenTracking,
                             onMarkWatchedOrRead = handleMarkWatchedOrRead
@@ -510,6 +565,7 @@ fun HomeScreen(
                             items = topManga,
                             libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
+                            onCardClick = { selectedMediaForDetail = it },
                             onAddToLibrary = handleAddToLibrary,
                             onWatchingClick = handleOpenTracking,
                             onMarkWatchedOrRead = handleMarkWatchedOrRead
@@ -532,6 +588,7 @@ fun HomeScreen(
                             items = topManhwa,
                             libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
+                            onCardClick = { selectedMediaForDetail = it },
                             onAddToLibrary = handleAddToLibrary,
                             onWatchingClick = handleOpenTracking,
                             onMarkWatchedOrRead = handleMarkWatchedOrRead
@@ -554,6 +611,7 @@ fun HomeScreen(
                             items = topMovies,
                             libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
+                            onCardClick = { selectedMediaForDetail = it },
                             onAddToLibrary = handleAddToLibrary,
                             onWatchingClick = handleOpenTracking,
                             onMarkWatchedOrRead = handleMarkWatchedOrRead
@@ -576,6 +634,7 @@ fun HomeScreen(
                             items = topTv,
                             libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
+                            onCardClick = { selectedMediaForDetail = it },
                             onAddToLibrary = handleAddToLibrary,
                             onWatchingClick = handleOpenTracking,
                             onMarkWatchedOrRead = handleMarkWatchedOrRead
@@ -623,6 +682,34 @@ fun HomeScreen(
                             Toast.makeText(context, "Saved — Watching ($unit)", Toast.LENGTH_SHORT).show()
                         }
                     }
+                }
+            )
+        }
+
+        // Rich Library Modal Detail/Status Dialog (Popup from Add to Library or Card Tap)
+        selectedMediaForDetail?.let { detailItem ->
+            val latestMedia = findMatchingLibraryEntry(detailItem) ?: detailItem
+            HomeMediaDetailDialog(
+                media = latestMedia,
+                isSaved = findMatchingLibraryEntry(detailItem) != null,
+                onDismiss = { selectedMediaForDetail = null },
+                onStatusChange = { newStatus ->
+                    handleStatusChange(latestMedia, newStatus)
+                },
+                onTrackProgress = {
+                    selectedMediaForDetail = null
+                    handleOpenTracking(latestMedia)
+                },
+                onOpen = {
+                    latestMedia.directWebUrl?.let { url ->
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        })
+                    }
+                },
+                onDelete = {
+                    selectedMediaForDetail = null
+                    handleRemoveFromLibrary(latestMedia)
                 }
             )
         }
@@ -745,6 +832,7 @@ private fun CinematicHeroCard(
     libraryMatch: EnrichedMediaEntity?,
     isSaved: Boolean,
     isDark: Boolean,
+    onCardClick: () -> Unit = {},
     onAddToLibrary: () -> Unit,
     onWatching: () -> Unit,
     onMarkWatchedOrRead: () -> Unit,
@@ -782,6 +870,11 @@ private fun CinematicHeroCard(
         modifier = Modifier
             .width(280.dp)
             .height(340.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onCardClick
+            )
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Full-bleed Image Background
@@ -1214,6 +1307,7 @@ private fun CompactCardRow(
     items: List<EnrichedMediaEntity>,
     libraryLookup: (EnrichedMediaEntity) -> EnrichedMediaEntity?,
     isDark: Boolean,
+    onCardClick: (EnrichedMediaEntity) -> Unit = {},
     onAddToLibrary: (EnrichedMediaEntity) -> Unit,
     onWatchingClick: (EnrichedMediaEntity) -> Unit,
     onMarkWatchedOrRead: (EnrichedMediaEntity) -> Unit
@@ -1233,6 +1327,7 @@ private fun CompactCardRow(
                 libraryMatch = libraryMatch,
                 isSaved = isSaved,
                 isDark = isDark,
+                onCardClick = { onCardClick(effectiveItem) },
                 onAddToLibrary = { onAddToLibrary(effectiveItem) },
                 onWatchingClick = { onWatchingClick(effectiveItem) },
                 onMarkWatchedOrRead = { onMarkWatchedOrRead(effectiveItem) }
@@ -1251,6 +1346,7 @@ private fun CompactGlassCard(
     libraryMatch: EnrichedMediaEntity?,
     isSaved: Boolean,
     isDark: Boolean,
+    onCardClick: () -> Unit = {},
     onAddToLibrary: () -> Unit,
     onWatchingClick: () -> Unit,
     onMarkWatchedOrRead: () -> Unit
@@ -1280,11 +1376,9 @@ private fun CompactGlassCard(
             .width(146.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                if (isSaved) onWatchingClick() else onAddToLibrary()
-            }
+                indication = null,
+                onClick = onCardClick
+            )
     ) {
         Column(modifier = Modifier.padding(9.dp)) {
             // Poster Frame
@@ -1697,6 +1791,353 @@ private fun CompactGlassCard(
                                     fontWeight = FontWeight.Bold,
                                     color = GreenAccent
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun getMediaTypeColor(type: String): Color = when (type.lowercase()) {
+    "anime" -> CyanAccent
+    "manga" -> GreenAccent
+    "manhwa" -> OrangeAccent
+    "movie" -> PurpleAccent
+    "tv", "series" -> BlueAccent
+    else -> CyanAccent
+}
+
+/**
+ * Rich Library Modal Detail & Status Dialog for HomeScreen (Popup)
+ */
+@Composable
+private fun HomeMediaDetailDialog(
+    media: EnrichedMediaEntity,
+    isSaved: Boolean,
+    onDismiss: () -> Unit,
+    onStatusChange: (String) -> Unit,
+    onTrackProgress: () -> Unit,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val isReadType = media.mediaType.equals("Manga", true) ||
+            media.mediaType.equals("Manhwa", true)
+    val isEpisodic = media.mediaType.equals("Anime", true) ||
+            media.mediaType.equals("Manga", true) ||
+            media.mediaType.equals("Manhwa", true) ||
+            media.mediaType.contains("TV", true) ||
+            media.mediaType.contains("Series", true)
+
+    val rim = Brush.verticalGradient(
+        listOf(
+            Color.White.copy(alpha = 0.28f),
+            Color.White.copy(alpha = 0.06f),
+            Color.Transparent
+        )
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xF2121524),
+            border = BorderStroke(1.dp, rim),
+            shadowElevation = 20.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .padding(horizontal = 4.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header with Poster thumbnail, details, and dedicated Dismiss button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 66.dp, height = 96.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF161828))
+                            .border(0.75.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                    ) {
+                        if (!media.posterUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = media.posterUrl,
+                                contentDescription = media.cleanTitle,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(media.mediaType.take(1), fontSize = 28.sp, color = Color(0xFF6B6E82))
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        val typeColor = getMediaTypeColor(media.mediaType)
+                        Text(
+                            media.mediaType.uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = typeColor,
+                            letterSpacing = 0.6.sp
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            media.cleanTitle,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            letterSpacing = (-0.2).sp
+                        )
+                        Spacer(Modifier.height(5.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            media.year?.let {
+                                Text("$it", fontSize = 12.sp, color = Color(0xFFA0A3B8))
+                            }
+                            media.rating?.let { score ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Star, null, tint = GoldAccent, modifier = Modifier.size(11.dp))
+                                    Text(" ${"%.1f".format(score)}", fontSize = 12.sp, color = GoldAccent, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            if (!media.ageRating.isNullOrBlank()) {
+                                AgeRatingBadge(rating = media.ageRating, fontSize = 9.sp)
+                            }
+                            Text("• ${media.sourceService}", fontSize = 11.sp, color = Color(0xFF6B6E82))
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = "Close",
+                            tint = Color(0xFFA0A3B8),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                media.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        overview,
+                        fontSize = 12.sp,
+                        color = Color(0xFFB0B3C8),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 16.5.sp
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "LIBRARY STATUS",
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF6B6E82),
+                    letterSpacing = 0.8.sp
+                )
+                Spacer(Modifier.height(8.dp))
+
+                val statusOptions = listOf(
+                    Triple("CURRENT", if (isReadType) "Reading" else "Watching", CyanAccent),
+                    Triple("PLANNING", if (isReadType) "Plan to Read" else "Plan to Watch", PurpleAccent),
+                    Triple("COMPLETED", "Completed", GreenAccent),
+                    Triple("DROPPED", "Dropped", Color(0xFFFF453A))
+                )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    statusOptions.forEach { (code, label, color) ->
+                        val isSelected = isSaved && media.userStatus.equals(code, ignoreCase = true)
+                        val rowBg by animateColorAsState(
+                            targetValue = if (isSelected) color.copy(alpha = 0.20f) else Color(0x33000000),
+                            animationSpec = tween(180),
+                            label = "status_bg"
+                        )
+                        val rowBorder by animateColorAsState(
+                            targetValue = if (isSelected) color else Color.White.copy(alpha = 0.12f),
+                            animationSpec = tween(180),
+                            label = "status_border"
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(rowBg)
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 0.75.dp,
+                                    color = rowBorder,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .clickable {
+                                    onStatusChange(code)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        label,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color.White else Color(0xFFD0D3E2)
+                                    )
+                                    val subText = when (code) {
+                                        "CURRENT" -> if (isReadType) "Currently reading chapter" else "Currently watching episode"
+                                        "PLANNING" -> "Saved to your watchlist"
+                                        "COMPLETED" -> if (isReadType) "All chapters finished" else "All episodes finished"
+                                        else -> "Stopped watching / reading"
+                                    }
+                                    Text(subText, fontSize = 10.5.sp, color = Color(0xFF7E8299))
+                                }
+                            }
+                            AnimatedVisibility(
+                                visible = isSelected,
+                                enter = fadeIn(tween(140)) + scaleIn(tween(140)),
+                                exit = fadeOut(tween(100)) + scaleOut(tween(100))
+                            ) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = color,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Interactive Progress Tracker Row
+                if (isEpisodic) {
+                    val currentVal = if (isReadType) media.chapter ?: 0 else media.episode ?: 0
+                    val unitName = if (isReadType) "Chapter" else "Episode"
+
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        onClick = onTrackProgress,
+                        shape = RoundedCornerShape(12.dp),
+                        color = CyanAccent.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, CyanAccent.copy(alpha = 0.45f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    "EPISODE / CHAPTER PROGRESS",
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CyanAccent,
+                                    letterSpacing = 0.7.sp
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    if (currentVal > 0) "$unitName $currentVal" else "Not started yet",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = CyanAccent,
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                ) {
+                                    Text(
+                                        "Track Progress",
+                                        color = Color(0xFF07080E),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // Action buttons: Open in Web & Remove from Library
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (media.directWebUrl != null) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(BlueAccent.copy(alpha = 0.15f))
+                                .border(1.dp, BlueAccent.copy(alpha = 0.4f), RoundedCornerShape(11.dp))
+                                .clickable { onOpen() }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, tint = BlueAccent, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Open Web", color = BlueAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (isSaved) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(Color(0xFFFF453A).copy(alpha = 0.15f))
+                                .border(1.dp, Color(0xFFFF453A).copy(alpha = 0.4f), RoundedCornerShape(11.dp))
+                                .clickable { onDelete() }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Delete, null, tint = Color(0xFFFF453A), modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Remove", color = Color(0xFFFF453A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
