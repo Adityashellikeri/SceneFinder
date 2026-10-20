@@ -1695,19 +1695,41 @@ class MediaEnrichmentRepository @Inject constructor(
         newStatus: String = "CURRENT",
         episode: Int?,
         chapter: Int?,
-        anilistToken: String = ""
+        anilistToken: String = "",
+        tmdbApiKey: String = "",
+        tmdbSessionId: String = "",
+        tmdbAccountId: Int = -1
     ): Boolean {
-        dao.updateProgress(media.id, newStatus, episode, chapter, System.currentTimeMillis())
+        // Determine final episode/chapter counts for COMPLETED
+        var finalEpisode = episode
+        var finalChapter = chapter
+        if (newStatus == "COMPLETED") {
+            if (finalEpisode == null && finalChapter == null) {
+                val totals = getTotalEpisodesOrChapters(media, tmdbApiKey)
+                finalEpisode = totals.first ?: media.episode ?: (if (media.mediaType.equals("Movie", true)) 1 else null)
+                finalChapter = totals.second ?: media.chapter
+            }
+        }
+
+        dao.updateProgress(media.id, newStatus, finalEpisode, finalChapter, System.currentTimeMillis())
 
         val isAnime = media.mediaType.equals("Anime", ignoreCase = true)
         val isManga = media.mediaType.equals("Manga", ignoreCase = true) || media.mediaType.equals("Manhwa", ignoreCase = true)
         val cleanAniToken = anilistToken.trim().removePrefix("Bearer ").trim()
+        val anilistStatus = when (newStatus.uppercase()) {
+            "COMPLETED" -> "COMPLETED"
+            "DROPPED" -> "DROPPED"
+            "PAUSED" -> "PAUSED"
+            "PLANNING" -> "PLANNING"
+            else -> "CURRENT"
+        }
 
+        // 1. AniList sync for Anime/Manga/Manhwa
         if ((isAnime || isManga || media.sourceService == "AniList") && cleanAniToken.isNotBlank()) {
             val numericId = media.id.substringAfterLast("_").toIntOrNull()
             if (numericId != null) {
                 try {
-                    val progressCount = if (isAnime) episode else chapter
+                    val progressCount = if (isManga) finalChapter else finalEpisode
                     val mutation = """
                         mutation (${"$"}mediaId: Int, ${"$"}status: MediaListStatus, ${"$"}progress: Int) {
                           SaveMediaListEntry(mediaId: ${"$"}mediaId, status: ${"$"}status, progress: ${"$"}progress) {
@@ -1719,7 +1741,7 @@ class MediaEnrichmentRepository @Inject constructor(
                     """.trimIndent()
                     val vars = mutableMapOf<String, Any?>(
                         "mediaId" to numericId,
-                        "status" to "CURRENT"
+                        "status" to anilistStatus
                     )
                     if (progressCount != null) {
                         vars["progress"] = progressCount
@@ -1729,6 +1751,105 @@ class MediaEnrichmentRepository @Inject constructor(
                 } catch (_: Exception) {}
             }
         }
+
+        // 2. TMDB sync for Movies/TV (mark as rated=10 for watched, add to watchlist)
+        if (!isAnime && !isManga && media.sourceService == "TMDB" &&
+            tmdbSessionId.isNotBlank() && !tmdbSessionId.startsWith("__pending__:") && tmdbAccountId > 0) {
+            val numericId = media.id.substringAfterLast("_").toIntOrNull()
+            if (numericId != null) {
+                val isMovie = media.mediaType.equals("Movie", ignoreCase = true) || media.id.startsWith("tmdb_movie_")
+                val type = if (isMovie) "movie" else "tv"
+                val key = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+                val inWatchlist = newStatus != "DROPPED"
+                try { updateTmdbWatchlist(key, tmdbSessionId, tmdbAccountId, type, numericId, inWatchlist) } catch (_: Exception) {}
+                // Also rate 10/10 on TMDB if completed
+                if (newStatus == "COMPLETED") {
+                    try {
+                        val rateBody = com.scenefinder.data.remote.api.TmdbRateBody(10.0)
+                        if (isMovie) {
+                            tmdbAccountApi.rateMovie(numericId, key, tmdbSessionId, rateBody)
+                        } else {
+                            tmdbAccountApi.rateTv(numericId, key, tmdbSessionId, rateBody)
+                        }
+                    } catch (_: Exception) {}
+                }
+                return true
+            }
+        }
         return true
+    }
+
+    suspend fun getTotalEpisodesOrChapters(
+        media: EnrichedMediaEntity,
+        tmdbApiKey: String = ""
+    ): Pair<Int?, Int?> = withContext(Dispatchers.IO) {
+        val isMovie = media.mediaType.equals("Movie", ignoreCase = true) || media.id.startsWith("tmdb_movie_")
+        if (isMovie) {
+            return@withContext Pair(1, null)
+        }
+
+        val isMangaOrManhwa = media.mediaType.equals("Manga", ignoreCase = true) ||
+                media.mediaType.equals("Manhwa", ignoreCase = true) ||
+                media.id.startsWith("anilist_manga_") ||
+                media.id.startsWith("anilist_manhwa_")
+
+        if (isMangaOrManhwa) {
+            if (media.chapter != null && media.chapter > 0) {
+                return@withContext Pair(null, media.chapter)
+            }
+            val numericId = media.id.substringAfterLast("_").toIntOrNull()
+            if (numericId != null) {
+                try {
+                    val full = searchAniListById(numericId)
+                    if (full?.chapter != null && full.chapter > 0) {
+                        dao.updateProgress(media.id, media.userStatus, media.episode, full.chapter)
+                        return@withContext Pair(null, full.chapter)
+                    }
+                } catch (_: Exception) {}
+            }
+            return@withContext Pair(null, media.chapter)
+        }
+
+        // Anime
+        if (media.mediaType.equals("Anime", ignoreCase = true) || media.id.startsWith("anilist_anime_")) {
+            if (media.episode != null && media.episode > 0) {
+                return@withContext Pair(media.episode, null)
+            }
+            val numericId = media.id.substringAfterLast("_").toIntOrNull()
+            if (numericId != null) {
+                try {
+                    val full = searchAniListById(numericId)
+                    if (full?.episode != null && full.episode > 0) {
+                        dao.updateProgress(media.id, media.userStatus, full.episode, media.chapter)
+                        return@withContext Pair(full.episode, null)
+                    }
+                } catch (_: Exception) {}
+            }
+            return@withContext Pair(media.episode, null)
+        }
+
+        // TV Shows / Web Series (TMDB)
+        if (media.mediaType.equals("TV Shows", ignoreCase = true) ||
+            media.mediaType.equals("Web Series", ignoreCase = true) ||
+            media.id.startsWith("tmdb_tv_")) {
+            if (media.episode != null && media.episode > 0) {
+                return@withContext Pair(media.episode, null)
+            }
+            val numericId = media.id.substringAfterLast("_").toIntOrNull()
+            if (numericId != null) {
+                try {
+                    val key = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+                    val tvDetails = tmdbApi.getTvDetails(numericId, key)
+                    val epCount = tvDetails.numberOfEpisodes
+                    if (epCount != null && epCount > 0) {
+                        dao.updateProgress(media.id, media.userStatus, epCount, media.chapter)
+                        return@withContext Pair(epCount, null)
+                    }
+                } catch (_: Exception) {}
+            }
+            return@withContext Pair(media.episode, null)
+        }
+
+        Pair(media.episode, media.chapter)
     }
 }

@@ -53,7 +53,21 @@ interface TmdbApi {
         @Query("language") language: String = "en-US",
         @Query("page") page: Int = 1
     ): TmdbSearchResponse
+
+    @GET("3/tv/{tv_id}")
+    suspend fun getTvDetails(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String = "en-US"
+    ): TmdbTvDetailsResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class TmdbTvDetailsResponse(
+    val id: Int?,
+    @Json(name = "number_of_episodes") val numberOfEpisodes: Int? = null,
+    @Json(name = "number_of_seasons") val numberOfSeasons: Int? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class TmdbMovieReleaseDatesResponse(

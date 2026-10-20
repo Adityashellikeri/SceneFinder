@@ -62,15 +62,22 @@ import com.scenefinder.ui.theme.LocalAppColors
 @Composable
 fun ProgressTrackingDialog(
     media: EnrichedMediaEntity,
+    totalEpisodes: Int? = null,
+    totalChapters: Int? = null,
     onDismiss: () -> Unit,
-    onSaveProgress: (media: EnrichedMediaEntity, currentEpisode: Int?, currentChapter: Int?) -> Unit
+    onSaveProgress: (media: EnrichedMediaEntity, currentEpisode: Int?, currentChapter: Int?) -> Unit,
+    onMarkAllCompleted: ((media: EnrichedMediaEntity) -> Unit)? = null
 ) {
     val isMangaOrManhwa = media.mediaType.equals("Manga", ignoreCase = true) ||
             media.mediaType.equals("Manhwa", ignoreCase = true)
     val unitLabel = if (isMangaOrManhwa) "Chapter" else "Episode"
     val pluralUnitLabel = if (isMangaOrManhwa) "Chapters" else "Episodes"
 
-    val maxTotal = if (isMangaOrManhwa) media.chapter ?: 0 else media.episode ?: 0
+    val maxTotal = if (isMangaOrManhwa) {
+        (totalChapters ?: media.chapter ?: 0)
+    } else {
+        (totalEpisodes ?: media.episode ?: (if (media.mediaType.equals("Movie", true)) 1 else 0))
+    }
     val initialProgress = (if (isMangaOrManhwa) media.chapter else media.episode) ?: 1
     var count by remember { mutableIntStateOf(if (initialProgress > 0) initialProgress else 1) }
 
@@ -376,7 +383,7 @@ fun ProgressTrackingDialog(
                     TextButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.9f)
                             .height(48.dp)
                     ) {
                         Text(
@@ -385,6 +392,26 @@ fun ProgressTrackingDialog(
                             fontWeight = FontWeight.SemiBold,
                             color = colors.textSecondary
                         )
+                    }
+
+                    if (onMarkAllCompleted != null) {
+                        Button(
+                            onClick = { onMarkAllCompleted(media) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF10B981)
+                            ),
+                            modifier = Modifier
+                                .weight(1.1f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text(
+                                text = if (isMangaOrManhwa) "Read All ✓" else "Watched ✓",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
 
                     Button(
@@ -397,7 +424,7 @@ fun ProgressTrackingDialog(
                             containerColor = Color.Transparent
                         ),
                         modifier = Modifier
-                            .weight(1.4f)
+                            .weight(1.1f)
                             .height(48.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(
@@ -408,7 +435,7 @@ fun ProgressTrackingDialog(
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         Text(
-                            text = "Save Progress",
+                            text = "Save",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.Black

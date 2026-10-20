@@ -1411,7 +1411,10 @@ fun HistoryScreen(
                         newStatus = "CURRENT",
                         episode = ep,
                         chapter = ch,
-                        anilistToken = anilistToken
+                        anilistToken = anilistToken,
+                        tmdbApiKey = apiKey,
+                        tmdbSessionId = tmdbSessionId,
+                        tmdbAccountId = tmdbAccountId
                     )
                     launch(Dispatchers.Main) {
                         val isManga = m.mediaType.equals("Manga", true) || m.mediaType.equals("Manhwa", true)

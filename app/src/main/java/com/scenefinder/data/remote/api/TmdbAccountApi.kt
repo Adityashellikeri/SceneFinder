@@ -98,7 +98,30 @@ interface TmdbAccountApi {
         @Query("session_id") sessionId: String,
         @Body body: TmdbWatchlistBody
     ): TmdbStatusResponse
+
+    /** Rate a movie */
+    @POST("3/movie/{movie_id}/rating")
+    suspend fun rateMovie(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String,
+        @Query("session_id") sessionId: String,
+        @Body body: TmdbRateBody
+    ): TmdbStatusResponse
+
+    /** Rate a TV show */
+    @POST("3/tv/{tv_id}/rating")
+    suspend fun rateTv(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String,
+        @Query("session_id") sessionId: String,
+        @Body body: TmdbRateBody
+    ): TmdbStatusResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class TmdbRateBody(
+    val value: Double = 10.0
+)
 
 @JsonClass(generateAdapter = true)
 data class TmdbRequestTokenResponse(
