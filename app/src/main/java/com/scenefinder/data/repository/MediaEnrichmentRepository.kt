@@ -1413,23 +1413,39 @@ class MediaEnrichmentRepository @Inject constructor(
         tmdbAccountApi.createRequestToken(apiKey).requestToken
     } catch (_: Exception) { null }
 
+    fun clearRecommendationsCache() {
+        searchCache.remove("home_recommendations")
+    }
+
     /**
      * Free Recommendation Algorithm:
      * Discovers personalized recommendations based on genres/formats found in user's library,
      * or trending masterpieces if library is empty.
      */
-    suspend fun getHomeRecommendations(userLibrary: List<EnrichedMediaEntity>): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
-        val cached = searchCache.get("home_recommendations")
-        if (cached != null) return@withContext cached
+    suspend fun getHomeRecommendations(
+        userLibrary: List<EnrichedMediaEntity>,
+        forceRefresh: Boolean = false
+    ): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        if (!forceRefresh) {
+            val cached = searchCache.get("home_recommendations")
+            if (cached != null) return@withContext cached
+        }
 
         val recommended = mutableListOf<EnrichedMediaEntity>()
         val libraryTitles = userLibrary.map { it.cleanTitle.lowercase() }.toSet()
+        val randomPage = if (forceRefresh) (1..4).random() else 1
+        val sorts = listOf(
+            "[TRENDING_DESC, SCORE_DESC]",
+            "[POPULARITY_DESC]",
+            "[SCORE_DESC]"
+        )
+        val selectedSort = if (forceRefresh) sorts.random() else "[TRENDING_DESC, SCORE_DESC]"
 
         try {
             val gql = """
                 query {
-                  Page(page: 1, perPage: 10) {
-                    media(type: ANIME, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
+                  Page(page: $randomPage, perPage: 12) {
+                    media(type: ANIME, sort: $selectedSort, isAdult: false) {
                       id title { english romaji native }
                       type format episodes averageScore description
                       coverImage { extraLarge large } bannerImage siteUrl
@@ -1460,7 +1476,7 @@ class MediaEnrichmentRepository @Inject constructor(
                             rating = item.averageScore?.let { it / 10f },
                             sourceService = "AniList",
                             directWebUrl = item.siteUrl ?: "https://anilist.co/anime/${item.id}",
-                            userStatus = "PLANNING",
+                            userStatus = "",
                             ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Anime")
                         )
                     )
@@ -1512,7 +1528,7 @@ class MediaEnrichmentRepository @Inject constructor(
                         rating = item.averageScore?.let { it / 10f },
                         sourceService = "AniList",
                         directWebUrl = item.siteUrl ?: "https://anilist.co/anime/${item.id}",
-                        userStatus = "PLANNING",
+                        userStatus = "",
                         ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Anime")
                     )
                 )
@@ -1560,7 +1576,7 @@ class MediaEnrichmentRepository @Inject constructor(
                         rating = item.averageScore?.let { it / 10f },
                         sourceService = "AniList",
                         directWebUrl = item.siteUrl ?: "https://anilist.co/manga/${item.id}",
-                        userStatus = "PLANNING",
+                        userStatus = "",
                         ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Manga")
                     )
                 )
@@ -1608,7 +1624,7 @@ class MediaEnrichmentRepository @Inject constructor(
                         rating = item.averageScore?.let { it / 10f },
                         sourceService = "AniList",
                         directWebUrl = item.siteUrl ?: "https://anilist.co/manga/${item.id}",
-                        userStatus = "PLANNING",
+                        userStatus = "",
                         ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Manhwa")
                     )
                 )
@@ -1644,7 +1660,7 @@ class MediaEnrichmentRepository @Inject constructor(
                         rating = item.voteAverage?.let { it / 1f },
                         sourceService = "TMDB",
                         directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
-                        userStatus = "PLANNING",
+                        userStatus = "",
                         ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie")
                     )
                 )
@@ -1680,7 +1696,7 @@ class MediaEnrichmentRepository @Inject constructor(
                         rating = item.voteAverage?.let { it / 1f },
                         sourceService = "TMDB",
                         directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
-                        userStatus = "PLANNING",
+                        userStatus = "",
                         ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows")
                     )
                 )
@@ -1688,6 +1704,225 @@ class MediaEnrichmentRepository @Inject constructor(
         } catch (_: Exception) {}
         if (list.isNotEmpty()) searchCache.put("top_tv", list)
         list
+    }
+
+    /**
+     * Random Discover: Fetches randomized picks for the selected category
+     * (Anime, Manga, Manhwa, Movies, TV Series)
+     */
+    suspend fun getRandomDiscover(category: String, apiKey: String = ""): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        val list = mutableListOf<EnrichedMediaEntity>()
+        val effectiveKey = apiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+        val randomPage = (1..6).random()
+
+        try {
+            when (category.lowercase().trim()) {
+                "anime" -> {
+                    val sorts = listOf(
+                        "[TRENDING_DESC, SCORE_DESC]",
+                        "[POPULARITY_DESC]",
+                        "[SCORE_DESC]",
+                        "[FAVOURITES_DESC]"
+                    )
+                    val sort = sorts.random()
+                    val gql = """
+                        query {
+                          Page(page: $randomPage, perPage: 12) {
+                            media(type: ANIME, sort: $sort, isAdult: false) {
+                              id title { english romaji native }
+                              type format episodes averageScore description
+                              coverImage { extraLarge large } bannerImage siteUrl
+                              genres isAdult tags { name isAdult rank }
+                            }
+                          }
+                        }
+                    """.trimIndent()
+                    val resp = aniListApi.queryMedia(AniListGraphQLRequest(gql, emptyMap()))
+                    resp.data?.page?.media?.forEach { item ->
+                        val title = item.title?.english ?: item.title?.romaji ?: "Anime"
+                        list.add(
+                            EnrichedMediaEntity(
+                                id = "anilist_anime_${item.id}",
+                                searchKey = title.lowercase(),
+                                cleanTitle = title,
+                                englishTitle = item.title?.english,
+                                originalTitle = item.title?.romaji,
+                                mediaType = "Anime",
+                                year = null,
+                                season = null,
+                                episode = item.episodes,
+                                chapter = null,
+                                overview = stripHtml(item.description),
+                                posterUrl = item.coverImage?.extraLarge ?: item.coverImage?.large,
+                                bannerUrl = item.bannerImage,
+                                rating = item.averageScore?.let { it / 10f },
+                                sourceService = "AniList",
+                                directWebUrl = item.siteUrl ?: "https://anilist.co/anime/${item.id}",
+                                userStatus = "",
+                                ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Anime")
+                            )
+                        )
+                    }
+                }
+                "manga" -> {
+                    val sorts = listOf(
+                        "[SCORE_DESC, POPULARITY_DESC]",
+                        "[POPULARITY_DESC]",
+                        "[FAVOURITES_DESC]",
+                        "[TRENDING_DESC]"
+                    )
+                    val sort = sorts.random()
+                    val gql = """
+                        query {
+                          Page(page: $randomPage, perPage: 12) {
+                            media(type: MANGA, format_in: [MANGA], sort: $sort, isAdult: false) {
+                              id title { english romaji native }
+                              type format chapters averageScore description
+                              coverImage { extraLarge large } bannerImage siteUrl
+                              genres isAdult tags { name isAdult rank }
+                            }
+                          }
+                        }
+                    """.trimIndent()
+                    val resp = aniListApi.queryMedia(AniListGraphQLRequest(gql, emptyMap()))
+                    resp.data?.page?.media?.forEach { item ->
+                        val title = item.title?.english ?: item.title?.romaji ?: "Manga"
+                        list.add(
+                            EnrichedMediaEntity(
+                                id = "anilist_manga_${item.id}",
+                                searchKey = title.lowercase(),
+                                cleanTitle = title,
+                                englishTitle = item.title?.english,
+                                originalTitle = item.title?.romaji,
+                                mediaType = "Manga",
+                                year = null,
+                                season = null,
+                                episode = null,
+                                chapter = item.chapters,
+                                overview = stripHtml(item.description),
+                                posterUrl = item.coverImage?.extraLarge ?: item.coverImage?.large,
+                                bannerUrl = item.bannerImage,
+                                rating = item.averageScore?.let { it / 10f },
+                                sourceService = "AniList",
+                                directWebUrl = item.siteUrl ?: "https://anilist.co/manga/${item.id}",
+                                userStatus = "",
+                                ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Manga")
+                            )
+                        )
+                    }
+                }
+                "manhwa" -> {
+                    val sorts = listOf(
+                        "[SCORE_DESC, POPULARITY_DESC]",
+                        "[POPULARITY_DESC]",
+                        "[FAVOURITES_DESC]",
+                        "[TRENDING_DESC]"
+                    )
+                    val sort = sorts.random()
+                    val gql = """
+                        query {
+                          Page(page: $randomPage, perPage: 12) {
+                            media(type: MANGA, countryOfOrigin: "KR", sort: $sort, isAdult: false) {
+                              id title { english romaji native }
+                              type format chapters averageScore description
+                              coverImage { extraLarge large } bannerImage siteUrl
+                              genres isAdult tags { name isAdult rank }
+                            }
+                          }
+                        }
+                    """.trimIndent()
+                    val resp = aniListApi.queryMedia(AniListGraphQLRequest(gql, emptyMap()))
+                    resp.data?.page?.media?.forEach { item ->
+                        val title = item.title?.english ?: item.title?.romaji ?: "Manhwa"
+                        list.add(
+                            EnrichedMediaEntity(
+                                id = "anilist_manhwa_${item.id}",
+                                searchKey = title.lowercase(),
+                                cleanTitle = title,
+                                englishTitle = item.title?.english,
+                                originalTitle = item.title?.romaji,
+                                mediaType = "Manhwa",
+                                year = null,
+                                season = null,
+                                episode = null,
+                                chapter = item.chapters,
+                                overview = stripHtml(item.description),
+                                posterUrl = item.coverImage?.extraLarge ?: item.coverImage?.large,
+                                bannerUrl = item.bannerImage,
+                                rating = item.averageScore?.let { it / 10f },
+                                sourceService = "AniList",
+                                directWebUrl = item.siteUrl ?: "https://anilist.co/manga/${item.id}",
+                                userStatus = "",
+                                ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Manhwa")
+                            )
+                        )
+                    }
+                }
+                "movie", "movies" -> {
+                    val resp = if (randomPage % 2 == 0) {
+                        tmdbApi.getTopRatedMovies(effectiveKey, page = randomPage)
+                    } else {
+                        tmdbApi.getTrendingMovies(effectiveKey)
+                    }
+                    resp.results?.shuffled()?.take(12)?.forEach { item ->
+                        list.add(
+                            EnrichedMediaEntity(
+                                id = "tmdb_movie_${item.id}",
+                                searchKey = item.displayTitle.lowercase(),
+                                cleanTitle = item.displayTitle,
+                                englishTitle = item.title,
+                                originalTitle = item.originalTitle,
+                                mediaType = "Movie",
+                                year = item.releaseDate?.take(4)?.toIntOrNull(),
+                                season = null,
+                                episode = null,
+                                chapter = null,
+                                overview = item.overview,
+                                posterUrl = item.fullPosterUrl,
+                                bannerUrl = item.fullBackdropUrl,
+                                rating = item.voteAverage?.let { it / 1f },
+                                sourceService = "TMDB",
+                                directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
+                                userStatus = "",
+                                ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie")
+                            )
+                        )
+                    }
+                }
+                else -> { // "tv", "tv shows", "series"
+                    val resp = if (randomPage % 2 == 0) {
+                        tmdbApi.getTopRatedTv(effectiveKey, page = randomPage)
+                    } else {
+                        tmdbApi.getTrendingTv(effectiveKey)
+                    }
+                    resp.results?.shuffled()?.take(12)?.forEach { item ->
+                        list.add(
+                            EnrichedMediaEntity(
+                                id = "tmdb_tv_${item.id}",
+                                searchKey = item.displayTitle.lowercase(),
+                                cleanTitle = item.displayTitle,
+                                englishTitle = item.name,
+                                originalTitle = item.originalName,
+                                mediaType = "TV Shows",
+                                year = item.firstAirDate?.take(4)?.toIntOrNull(),
+                                season = null,
+                                episode = null,
+                                chapter = null,
+                                overview = item.overview,
+                                posterUrl = item.fullPosterUrl,
+                                bannerUrl = item.fullBackdropUrl,
+                                rating = item.voteAverage?.let { it / 1f },
+                                sourceService = "TMDB",
+                                directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
+                                userStatus = "",
+                                ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows")
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        list.shuffled()
     }
 
     suspend fun updateMediaProgress(

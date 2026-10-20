@@ -5,7 +5,12 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -46,12 +51,15 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkAdded
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.Close
@@ -78,6 +86,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -155,6 +164,50 @@ fun HomeScreen(
     var trackingDialogMedia by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var trackingTotalEpisodes by remember { mutableStateOf<Int?>(null) }
     var trackingTotalChapters by remember { mutableStateOf<Int?>(null) }
+
+    var isRefreshingRecs by remember { mutableStateOf(false) }
+    var selectedDiscoverCategory by remember { mutableStateOf("Anime") }
+    var discoverItems by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
+    var isDiscoverLoading by remember { mutableStateOf(false) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "spin")
+    val spinAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "spin_angle"
+    )
+
+    val fetchDiscover: (String) -> Unit = { category ->
+        isDiscoverLoading = true
+        scope.launch(Dispatchers.IO) {
+            val items = repository.getRandomDiscover(category, apiKey)
+            withContext(Dispatchers.Main) {
+                discoverItems = items
+                isDiscoverLoading = false
+            }
+        }
+    }
+
+    val handleRefreshRecommendations: () -> Unit = {
+        if (!isRefreshingRecs) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            isRefreshingRecs = true
+            scope.launch(Dispatchers.IO) {
+                repository.clearRecommendationsCache()
+                val fresh = repository.getHomeRecommendations(userLibrary, forceRefresh = true)
+                withContext(Dispatchers.Main) {
+                    if (fresh.isNotEmpty()) {
+                        recommendations = fresh
+                    }
+                    isRefreshingRecs = false
+                }
+            }
+        }
+    }
 
     val handleOpenTracking: (EnrichedMediaEntity) -> Unit = { item ->
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -279,6 +332,7 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
+        fetchDiscover("Anime")
         withContext(Dispatchers.IO) {
             try {
                 coroutineScope {
@@ -290,30 +344,15 @@ fun HomeScreen(
                     val tvDeferred = async { runCatching { repository.getTopTvSeries(apiKey) }.getOrDefault(emptyList()) }
 
                     var recs = recsDeferred.await()
-                    var anime = animeDeferred.await()
-                    var manga = mangaDeferred.await()
-                    var manhwa = manhwaDeferred.await()
-                    var movies = moviesDeferred.await()
-                    var tv = tvDeferred.await()
+                    val anime = animeDeferred.await()
+                    val manga = mangaDeferred.await()
+                    val manhwa = manhwaDeferred.await()
+                    val movies = moviesDeferred.await()
+                    val tv = tvDeferred.await()
 
-                    // Seamless instant fallback from local library if network returns empty
+                    // Safe fallback for personalized recommendations if network returned empty
                     if (recs.isEmpty() && userLibrary.isNotEmpty()) {
                         recs = userLibrary.shuffled().take(10)
-                    }
-                    if (movies.isEmpty()) {
-                        movies = userLibrary.filter { it.mediaType.equals("Movie", ignoreCase = true) }
-                    }
-                    if (tv.isEmpty()) {
-                        tv = userLibrary.filter { it.mediaType.equals("TV Shows", ignoreCase = true) || it.mediaType.equals("Web Series", ignoreCase = true) }
-                    }
-                    if (anime.isEmpty()) {
-                        anime = userLibrary.filter { it.mediaType.equals("Anime", ignoreCase = true) }
-                    }
-                    if (manga.isEmpty()) {
-                        manga = userLibrary.filter { it.mediaType.equals("Manga", ignoreCase = true) }
-                    }
-                    if (manhwa.isEmpty()) {
-                        manhwa = userLibrary.filter { it.mediaType.equals("Manhwa", ignoreCase = true) }
                     }
 
                     withContext(Dispatchers.Main) {
@@ -495,7 +534,42 @@ fun HomeScreen(
                             title = "Recommended For You",
                             subtitle = "Personalized from trending anime, manga & movies",
                             accentColor = CyanAccent,
-                            icon = Icons.Default.AutoAwesome
+                            icon = Icons.Default.AutoAwesome,
+                            trailingContent = {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(CyanAccent.copy(alpha = 0.15f))
+                                        .border(0.75.dp, CyanAccent.copy(alpha = 0.50f), RoundedCornerShape(10.dp))
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = handleRefreshRecommendations
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Refresh Recommendations",
+                                            tint = CyanAccent,
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .graphicsLayer(rotationZ = if (isRefreshingRecs) spinAngle else 0f)
+                                        )
+                                        Text(
+                                            text = if (isRefreshingRecs) "Refreshing" else "Refresh",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = CyanAccent
+                                        )
+                                    }
+                                }
+                            }
                         )
                     }
                     item {
@@ -524,6 +598,133 @@ fun HomeScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                // Section: Discover & Explore (Category-based Randomizer for Movies, TV, Anime, Manga, Manhwa)
+                item {
+                    SectionHeader(
+                        title = "Discover & Explore",
+                        subtitle = "Random handpicked gems in $selectedDiscoverCategory",
+                        accentColor = Color(0xFFFF5E7E),
+                        icon = Icons.Default.Casino,
+                        trailingContent = {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFFF5E7E).copy(alpha = 0.15f))
+                                    .border(0.75.dp, Color(0xFFFF5E7E).copy(alpha = 0.50f), RoundedCornerShape(10.dp))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            fetchDiscover(selectedDiscoverCategory)
+                                        }
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shuffle,
+                                        contentDescription = "Shuffle",
+                                        tint = Color(0xFFFF5E7E),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "Shuffle",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF5E7E)
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+
+                // Category Selection Chips Row
+                item {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)
+                    ) {
+                        items(listOf("Anime", "Manga", "Manhwa", "Movie", "TV Series")) { cat ->
+                            val isSelected = cat.equals(selectedDiscoverCategory, ignoreCase = true)
+                            val chipAccent = when (cat) {
+                                "Anime" -> PurpleAccent
+                                "Manga" -> GreenAccent
+                                "Manhwa" -> Color(0xFF32D74B)
+                                "Movie" -> BlueAccent
+                                else -> OrangeAccent
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (isSelected) chipAccent.copy(alpha = 0.22f)
+                                        else if (colors.isDark) Color(0x1AFFFFFF) else Color(0x0D000000)
+                                    )
+                                    .border(
+                                        width = if (isSelected) 1.dp else 0.6.dp,
+                                        color = if (isSelected) chipAccent else Color.White.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {
+                                            if (selectedDiscoverCategory != cat) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                selectedDiscoverCategory = cat
+                                                fetchDiscover(cat)
+                                            }
+                                        }
+                                    )
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = cat,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                    color = if (isSelected) chipAccent else colors.textPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Discover Items Carousel
+                item {
+                    if (isDiscoverLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFFFF5E7E),
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    } else if (discoverItems.isNotEmpty()) {
+                        CompactCardRow(
+                            items = discoverItems,
+                            libraryLookup = ::findMatchingLibraryEntry,
+                            isDark = colors.isDark,
+                            onCardClick = { selectedMediaForDetail = it },
+                            onAddToLibrary = handleAddToLibrary,
+                            onWatchingClick = handleOpenTracking,
+                            onMarkWatchedOrRead = handleMarkWatchedOrRead
+                        )
                     }
                 }
 
@@ -725,7 +926,8 @@ private fun SectionHeader(
     title: String,
     subtitle: String,
     accentColor: Color,
-    icon: ImageVector
+    icon: ImageVector,
+    trailingContent: (@Composable () -> Unit)? = null
 ) {
     val colors = LocalAppColors.current
     Row(
@@ -736,6 +938,7 @@ private fun SectionHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
+            modifier = Modifier.weight(1f, fill = false),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -773,6 +976,9 @@ private fun SectionHeader(
                     color = colors.textSecondary
                 )
             }
+        }
+        if (trailingContent != null) {
+            trailingContent()
         }
     }
 }
@@ -1055,10 +1261,10 @@ private fun CinematicHeroCard(
                 )
                 Spacer(Modifier.height(13.dp))
 
-                // Action Controls based on Media State
+                // Action Pill: single button — Add to Library or status pill, both open popup
                 when {
                     !isSaved -> {
-                        // State 1: Unsaved -> Single wide "+ Add to Library"
+                        // Unsaved: "+ Add to Library" -> opens popup
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1079,7 +1285,7 @@ private fun CinematicHeroCard(
                                 horizontalArrangement = Arrangement.spacedBy(7.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.Add,
+                                    imageVector = Icons.Default.Add,
                                     contentDescription = null,
                                     tint = Color(0xFF07080E),
                                     modifier = Modifier.size(17.dp)
@@ -1094,19 +1300,37 @@ private fun CinematicHeroCard(
                         }
                     }
 
-                    isCompleted -> {
-                        // State 2: Completed -> Clean emerald status pill (tapping allows adjusting)
+                    else -> {
+                        // Saved: single color-coded status pill -> tapping opens popup
+                        val (pillColor, pillIcon, pillLabel) = when (currentStatus) {
+                            "CURRENT" -> {
+                                val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                                val label = if (ep != null) {
+                                    if (isReadType) "Ch. $ep" else "Ep. $ep"
+                                } else {
+                                    if (isReadType) "Reading" else "Watching"
+                                }
+                                Triple(CyanAccent, if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow, label)
+                            }
+                            "COMPLETED" ->
+                                Triple(GreenAccent, Icons.Default.Check, "Completed")
+                            "DROPPED" ->
+                                Triple(Color(0xFFFF453A), Icons.Default.Check, "Dropped")
+                            else -> // PLANNING or anything else
+                                Triple(PurpleAccent, Icons.Default.BookmarkAdded, if (isReadType) "Plan to Read" else "Plan to Watch")
+                        }
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(40.dp)
+                                .height(42.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(GreenAccent.copy(alpha = 0.20f))
-                                .border(0.8.dp, GreenAccent.copy(alpha = 0.60f), RoundedCornerShape(14.dp))
+                                .background(pillColor.copy(alpha = 0.18f))
+                                .border(0.8.dp, pillColor.copy(alpha = 0.60f), RoundedCornerShape(14.dp))
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                    onClick = onWatching
+                                    onClick = onAddToLibrary // Opens popup!
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1115,181 +1339,17 @@ private fun CinematicHeroCard(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.Check,
+                                    pillIcon,
                                     contentDescription = null,
-                                    tint = GreenAccent,
-                                    modifier = Modifier.size(16.dp)
+                                    tint = pillColor,
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Text(
-                                    text = if (isReadType) "Completed (All Chapters Read)" else "Completed (All Episodes Watched)",
-                                    fontSize = 12.sp,
+                                    text = pillLabel,
+                                    fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = GreenAccent
+                                    color = pillColor
                                 )
-                            }
-                        }
-                    }
-
-                    currentStatus == "CURRENT" -> {
-                        // State 3: Actively Watching / Reading -> [ Ep. X ▸ ] + [ ✓ Mark Done ]
-                        val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
-                        val total = if (isReadType) media.chapter else media.episode
-                        val watchingLabel = when {
-                            ep != null && total != null && total > 0 -> if (isReadType) "Ch. $ep of $total ▸" else "Ep. $ep of $total ▸"
-                            ep != null -> if (isReadType) "Ch. $ep ▸" else "Ep. $ep ▸"
-                            else -> if (isReadType) "Reading ▸" else "Watching ▸"
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1.3f)
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
-                                    )
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = onWatching
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Icon(
-                                        if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = Color(0xFF07080E),
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = watchingLabel,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF07080E),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(GreenAccent.copy(alpha = 0.20f))
-                                    .border(0.75.dp, GreenAccent.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = onMarkWatchedOrRead
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = GreenAccent,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = "Mark Done",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = GreenAccent
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    else -> {
-                        // State 4: Planning -> [ ▶ Start Watching ] + [ ✓ Mark Done ]
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1.3f)
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
-                                    )
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = onWatching
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Icon(
-                                        if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = Color(0xFF07080E),
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = if (isReadType) "Start Reading" else "Start Watching",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF07080E),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(GreenAccent.copy(alpha = 0.20f))
-                                    .border(0.75.dp, GreenAccent.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = onMarkWatchedOrRead
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = GreenAccent,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = "Mark Done",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = GreenAccent
-                                    )
-                                }
                             }
                         }
                     }

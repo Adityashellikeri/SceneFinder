@@ -24,7 +24,7 @@ data class EnrichedMediaEntity(
     val rating: Float?,
     val sourceService: String,
     val directWebUrl: String?,
-    val userStatus: String = "PLANNING",
+    val userStatus: String = "",
     val ageRating: String? = null,
     val cachedAt: Long = System.currentTimeMillis()
 )
