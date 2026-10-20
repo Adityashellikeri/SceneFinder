@@ -57,6 +57,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -349,6 +351,7 @@ fun HistoryScreen(
     var isSearchBarActive by remember { mutableStateOf(startInSearch) }
     var selectedStatusFilter by remember { mutableStateOf("ALL") }
     var selectedMediaTypeFilter by remember { mutableStateOf("ALL") }
+    var showFilterModal by remember { mutableStateOf(false) }
 
     val mediaTypeFilters = listOf(
         "ALL" to "All",
@@ -768,7 +771,7 @@ fun HistoryScreen(
             }
         }
 
-        // Categorical options bar for Search: Anime, Manga, Movie, Manhwa, Web Series
+        // Categorical options bar for Search: Anime, Manga, Movie, Manhwa, Web Series (Pink Row)
         if (isSearchBarActive) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
@@ -797,6 +800,69 @@ fun HistoryScreen(
                                 color = textColor
                             )
                         }
+                    }
+                }
+            }
+
+            // User request: "keep which is in pink and make the other 2 below it in a button"
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                val isFiltered = selectedStatusFilter != "ALL" || selectedMediaTypeFilter != "ALL"
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        onClick = { showFilterModal = true },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isFiltered) Color(0xFF00F2FE).copy(alpha = 0.20f) else IGCard,
+                        border = BorderStroke(0.75.dp, if (isFiltered) Color(0xFF00F2FE).copy(alpha = 0.7f) else IGDivider),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Tune,
+                                contentDescription = "Filters",
+                                tint = if (isFiltered) Color(0xFF00F2FE) else IGTextPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            val labelText = if (isFiltered) {
+                                val active = mutableListOf<String>()
+                                if (selectedStatusFilter != "ALL") active.add(statusFilters.find { it.first == selectedStatusFilter }?.second ?: selectedStatusFilter)
+                                if (selectedMediaTypeFilter != "ALL") active.add(selectedMediaTypeFilter)
+                                "Filtered: " + active.joinToString(" • ")
+                            } else {
+                                "Filters (Status & Library) ▾"
+                            }
+                            Text(
+                                text = labelText,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isFiltered) Color(0xFF00F2FE) else IGTextPrimary
+                            )
+                        }
+                    }
+
+                    if (isFiltered) {
+                        Text(
+                            text = "Reset",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFF453A),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    selectedStatusFilter = "ALL"
+                                    selectedMediaTypeFilter = "ALL"
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
                 }
             }
@@ -933,110 +999,147 @@ fun HistoryScreen(
                     IGDividerLine()
                 }
             }
-        } else {
-            // Status filter chips
+        } else if (isSearchBarActive && !hasSearched) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(
-                        items = statusFilters,
-                        key = { it.first }
-                    ) { (code, label) ->
-                        val selected = selectedStatusFilter == code
-                        val chipAccent = when (code) {
-                            "CURRENT" -> Color(0xFF0095F6)
-                            "PLANNING" -> Color(0xFFA855F7)
-                            "COMPLETED" -> Color(0xFF10B981)
-                            "DROPPED" -> Color(0xFFEF4444)
-                            else -> Color(0xFF00F2FE)
-                        }
-                        val bgColor by animateColorAsState(
-                            targetValue = if (selected) chipAccent.copy(alpha = 0.22f) else IGCard,
-                            animationSpec = tween(180),
-                            label = "c_bg"
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = Color(0xFF00F2FE).copy(alpha = 0.45f),
+                            modifier = Modifier.size(36.dp)
                         )
-                        val borderColor by animateColorAsState(
-                            targetValue = if (selected) chipAccent.copy(alpha = 0.85f) else IGDivider,
-                            animationSpec = tween(180),
-                            label = "c_border"
+                        Text(
+                            text = "Search across anime, movies, manga & manhwa",
+                            fontSize = 13.sp,
+                            color = IGTextSecondary
                         )
-                        val textColor by animateColorAsState(
-                            targetValue = if (selected) chipAccent else IGTextSecondary,
-                            animationSpec = tween(180),
-                            label = "c_text"
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(bgColor)
-                                .border(1.dp, borderColor, RoundedCornerShape(20.dp))
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    selectedStatusFilter = code
-                                }
-                                .padding(horizontal = 16.dp, vertical = 7.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                fontSize = 13.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                color = textColor
-                            )
-                        }
                     }
                 }
             }
-
-            // Media type filter chips
+        } else {
+            // Unified Filters Section (Single Clean Bar for Library)
             item(span = { GridItemSpan(maxLineSpan) }) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    modifier = Modifier.padding(bottom = 6.dp)
+                val isFiltered = selectedStatusFilter != "ALL" || selectedMediaTypeFilter != "ALL"
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    items(
-                        items = mediaTypeFilters,
-                        key = { it.first }
-                    ) { (code, label) ->
-                        val selected = selectedMediaTypeFilter == code
-                        val typeAccent = if (code == "ALL") Color.White else getMediaTypeColor(code)
-                        val chipColor by animateColorAsState(
-                            targetValue = if (selected) typeAccent.copy(alpha = 0.22f) else IGCard,
-                            animationSpec = tween(180),
-                            label = "mt_bg"
-                        )
-                        val chipBorder by animateColorAsState(
-                            targetValue = if (selected) typeAccent.copy(alpha = 0.8f) else IGDivider,
-                            animationSpec = tween(180),
-                            label = "mt_border"
-                        )
-                        val chipTextColor by animateColorAsState(
-                            targetValue = if (selected) typeAccent else IGTextSecondary,
-                            animationSpec = tween(180),
-                            label = "mt_text"
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(chipColor)
-                                .border(1.dp, chipBorder, RoundedCornerShape(16.dp))
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    selectedMediaTypeFilter = code
-                                }
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
+                            // Primary Unified Filters Button
+                            Surface(
+                                onClick = { showFilterModal = true },
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isFiltered) Color(0xFF00F2FE).copy(alpha = 0.22f) else IGCard,
+                                border = BorderStroke(1.dp, if (isFiltered) Color(0xFF00F2FE).copy(alpha = 0.75f) else IGDivider),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Tune,
+                                        contentDescription = "Filters",
+                                        tint = if (isFiltered) Color(0xFF00F2FE) else IGTextPrimary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = if (isFiltered) "Filters (Active)" else "Filters ▾",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isFiltered) Color(0xFF00F2FE) else IGTextPrimary
+                                    )
+                                }
+                            }
+
+                            // Quick horizontal status pills
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(
+                                    listOf("ALL" to "All", "CURRENT" to "Watching", "PLANNING" to "Plan to Watch", "COMPLETED" to "Completed")
+                                ) { (code, label) ->
+                                    val selected = selectedStatusFilter == code
+                                    val chipAccent = when (code) {
+                                        "CURRENT" -> Color(0xFF0095F6)
+                                        "PLANNING" -> Color(0xFFA855F7)
+                                        "COMPLETED" -> Color(0xFF10B981)
+                                        else -> Color(0xFF00F2FE)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(if (selected) chipAccent.copy(alpha = 0.22f) else IGCard)
+                                            .border(0.8.dp, if (selected) chipAccent else IGDivider, RoundedCornerShape(16.dp))
+                                            .clickable {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                selectedStatusFilter = code
+                                            }
+                                            .padding(horizontal = 11.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selected) chipAccent else IGTextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isFiltered) {
                             Text(
-                                text = label,
-                                fontSize = 12.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                color = chipTextColor
+                                text = "Clear",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF453A),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        selectedStatusFilter = "ALL"
+                                        selectedMediaTypeFilter = "ALL"
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
                             )
+                        }
+                    }
+
+                    // Active Media Type indicator pill if filtered
+                    if (selectedMediaTypeFilter != "ALL") {
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Media Type: ", fontSize = 11.sp, color = IGTextTertiary)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(getMediaTypeColor(selectedMediaTypeFilter).copy(alpha = 0.22f))
+                                    .border(0.7.dp, getMediaTypeColor(selectedMediaTypeFilter), RoundedCornerShape(10.dp))
+                                    .clickable { selectedMediaTypeFilter = "ALL" }
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("${selectedMediaTypeFilter} ✕", fontSize = 10.5.sp, color = getMediaTypeColor(selectedMediaTypeFilter), fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -1318,6 +1421,169 @@ fun HistoryScreen(
                 }
             }
         )
+    }
+
+    // Unified Filter Dialog (for both Search and Library)
+    if (showFilterModal) {
+        Dialog(onDismissRequest = { showFilterModal = false }) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xF2121524),
+                border = BorderStroke(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.08f), Color.Transparent))),
+                shadowElevation = 24.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(22.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF00F2FE))
+                            )
+                            Text(
+                                text = "FILTER LIBRARY",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00F2FE),
+                                letterSpacing = 0.8.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = { showFilterModal = false },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = "Close",
+                                tint = IGTextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Text(
+                        text = "WATCH STATUS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = IGTextSecondary,
+                        letterSpacing = 0.6.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(statusFilters, key = { it.first }) { (code, label) ->
+                            val selected = selectedStatusFilter == code
+                            val chipAccent = when (code) {
+                                "CURRENT" -> Color(0xFF0095F6)
+                                "PLANNING" -> Color(0xFFA855F7)
+                                "COMPLETED" -> Color(0xFF10B981)
+                                "DROPPED" -> Color(0xFFEF4444)
+                                else -> Color(0xFF00F2FE)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (selected) chipAccent.copy(alpha = 0.24f) else IGCard)
+                                    .border(1.dp, if (selected) chipAccent else IGDivider, RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedStatusFilter = code
+                                    }
+                                    .padding(horizontal = 13.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) chipAccent else IGTextSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    Text(
+                        text = "MEDIA TYPE",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = IGTextSecondary,
+                        letterSpacing = 0.6.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(mediaTypeFilters, key = { it.first }) { (code, label) ->
+                            val selected = selectedMediaTypeFilter == code
+                            val typeAccent = if (code == "ALL") Color.White else getMediaTypeColor(code)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (selected) typeAccent.copy(alpha = 0.24f) else IGCard)
+                                    .border(1.dp, if (selected) typeAccent else IGDivider, RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        selectedMediaTypeFilter = code
+                                    }
+                                    .padding(horizontal = 13.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) typeAccent else IGTextSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                selectedStatusFilter = "ALL"
+                                selectedMediaTypeFilter = "ALL"
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Reset All", color = Color(0xFFFF453A), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        Button(
+                            onClick = { showFilterModal = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .height(46.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Brush.horizontalGradient(listOf(Color(0xFF00F2FE), Color(0xFF0095F6)))),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text("Apply Filters", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

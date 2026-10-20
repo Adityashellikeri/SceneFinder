@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.BookmarkAdded
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -76,6 +77,7 @@ import com.scenefinder.data.local.dao.EnrichedMediaDao
 import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.data.prefs.AppSettings
 import com.scenefinder.data.repository.MediaEnrichmentRepository
+import com.scenefinder.ui.components.AgeRatingBadge
 import com.scenefinder.ui.components.ProgressTrackingDialog
 import com.scenefinder.ui.theme.LocalAppColors
 import kotlinx.coroutines.Dispatchers
@@ -113,7 +115,16 @@ fun HomeScreen(
     val tmdbAccountId by settings.tmdbAccountId.collectAsState()
 
     val userLibrary by dao.getAllHistory().collectAsState(initial = emptyList())
-    val savedIds = remember(userLibrary) { userLibrary.map { it.id }.toSet() }
+
+    // Fast O(1) matching between feed items and user's saved library
+    val libraryById = remember(userLibrary) { userLibrary.associateBy { it.id } }
+    val libraryByTitle = remember(userLibrary) {
+        userLibrary.associateBy { it.cleanTitle.trim().lowercase() }
+    }
+
+    fun findMatchingLibraryEntry(media: EnrichedMediaEntity): EnrichedMediaEntity? {
+        return libraryById[media.id] ?: libraryByTitle[media.cleanTitle.trim().lowercase()]
+    }
 
     var recommendations by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
     var topAnime by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
@@ -311,21 +322,25 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)
                         ) {
                             items(recommendations, key = { it.id }) { item ->
-                                val isSaved = savedIds.contains(item.id)
+                                val libraryEntry = findMatchingLibraryEntry(item)
+                                val effectiveItem = libraryEntry ?: item
+                                val isSaved = libraryEntry != null
+
                                 CinematicHeroCard(
-                                    media = item,
+                                    media = effectiveItem,
+                                    libraryMatch = libraryEntry,
                                     isSaved = isSaved,
                                     isDark = colors.isDark,
                                     onWatching = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        trackingDialogMedia = item
+                                        trackingDialogMedia = effectiveItem
                                     },
                                     onToggleLibrary = {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         scope.launch(Dispatchers.IO) {
                                             if (isSaved) {
                                                 repository.removeFromLibrary(
-                                                    item,
+                                                    effectiveItem,
                                                     anilistToken,
                                                     apiKey,
                                                     tmdbSessionId,
@@ -333,7 +348,7 @@ fun HomeScreen(
                                                 )
                                             } else {
                                                 repository.saveToLibrary(
-                                                    item.copy(userStatus = "PLANNING"),
+                                                    effectiveItem.copy(userStatus = "PLANNING"),
                                                     anilistToken,
                                                     apiKey,
                                                     tmdbSessionId,
@@ -361,7 +376,7 @@ fun HomeScreen(
                     item {
                         CompactCardRow(
                             items = topAnime,
-                            savedIds = savedIds,
+                            libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
                             onWatchingClick = { trackingDialogMedia = it }
                         )
@@ -381,7 +396,7 @@ fun HomeScreen(
                     item {
                         CompactCardRow(
                             items = topManga,
-                            savedIds = savedIds,
+                            libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
                             onWatchingClick = { trackingDialogMedia = it }
                         )
@@ -401,7 +416,7 @@ fun HomeScreen(
                     item {
                         CompactCardRow(
                             items = topManhwa,
-                            savedIds = savedIds,
+                            libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
                             onWatchingClick = { trackingDialogMedia = it }
                         )
@@ -421,7 +436,7 @@ fun HomeScreen(
                     item {
                         CompactCardRow(
                             items = topMovies,
-                            savedIds = savedIds,
+                            libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
                             onWatchingClick = { trackingDialogMedia = it }
                         )
@@ -441,7 +456,7 @@ fun HomeScreen(
                     item {
                         CompactCardRow(
                             items = topTv,
-                            savedIds = savedIds,
+                            libraryLookup = ::findMatchingLibraryEntry,
                             isDark = colors.isDark,
                             onWatchingClick = { trackingDialogMedia = it }
                         )
@@ -538,7 +553,7 @@ private fun SectionHeader(
             }
         }
 
-        // Apple-style "Top 10" badge
+        // Apple-style "Featured" badge
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(14.dp))
@@ -604,11 +619,12 @@ private fun GlassCircularButton(
 }
 
 /**
- * Cinematic Full-Bleed Hero Card (Apple TV / VisionOS style)
+ * Cinematic Full-Bleed Hero Card (with Age Rating & Library Status Sync)
  */
 @Composable
 private fun CinematicHeroCard(
     media: EnrichedMediaEntity,
+    libraryMatch: EnrichedMediaEntity?,
     isSaved: Boolean,
     isDark: Boolean,
     onWatching: () -> Unit,
@@ -672,7 +688,7 @@ private fun CinematicHeroCard(
                     .background(scrim)
             )
 
-            // Top Badges
+            // Top Badges: Media Type, Age Rating Badge & Rating Star
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -680,25 +696,35 @@ private fun CinematicHeroCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Media Type Glass Pill
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.70f))
-                        .border(
-                            0.7.dp,
-                            CyanAccent.copy(alpha = 0.6f),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .padding(horizontal = 9.dp, vertical = 3.5.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = media.mediaType.uppercase(),
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = CyanAccent,
-                        letterSpacing = 0.6.sp
-                    )
+                    // Media Type Glass Pill
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.70f))
+                            .border(
+                                0.7.dp,
+                                CyanAccent.copy(alpha = 0.6f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = media.mediaType.uppercase(),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = CyanAccent,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    // Age Rating Badge (18+, 16+, 13+, PG-13, etc.)
+                    if (!media.ageRating.isNullOrBlank()) {
+                        AgeRatingBadge(rating = media.ageRating, fontSize = 9.sp)
+                    }
                 }
 
                 // Star Rating Glass Pill
@@ -712,7 +738,7 @@ private fun CinematicHeroCard(
                                 GoldAccent.copy(alpha = 0.5f),
                                 RoundedCornerShape(8.dp)
                             )
-                            .padding(horizontal = 8.dp, vertical = 3.5.dp),
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
@@ -739,17 +765,48 @@ private fun CinematicHeroCard(
                     .align(Alignment.BottomStart)
                     .padding(16.dp)
             ) {
-                Text(
-                    text = media.cleanTitle,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    letterSpacing = (-0.2).sp
-                )
+                // Title and Synced Library Status
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = media.cleanTitle,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        letterSpacing = (-0.2).sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Library Status Badge if in user's library
+                    if (libraryMatch != null) {
+                        Spacer(Modifier.width(6.dp))
+                        val status = libraryMatch.userStatus.uppercase()
+                        val (sColor, sText) = when (status) {
+                            "CURRENT" -> CyanAccent to if (isReadType) "Reading" else "Watching"
+                            "COMPLETED" -> GreenAccent to "Completed"
+                            "DROPPED" -> Color(0xFFFF453A) to "Dropped"
+                            else -> PurpleAccent to "Planning"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(sColor.copy(alpha = 0.22f))
+                                .border(0.7.dp, sColor.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(text = sText, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = sColor)
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(3.dp))
                 val metaText = when {
+                    libraryMatch?.episode != null -> "Progress: Ep ${libraryMatch.episode} • ${media.mediaType}"
+                    libraryMatch?.chapter != null -> "Progress: Ch ${libraryMatch.chapter} • ${media.mediaType}"
                     media.year != null -> "${media.year} • ${media.mediaType}"
                     else -> media.mediaType
                 }
@@ -770,12 +827,23 @@ private fun CinematicHeroCard(
                 )
                 Spacer(Modifier.height(13.dp))
 
-                // Actions: Watching Pill + Glass Bookmark
+                // Actions: Synced Watching Pill + Glass Bookmark
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val currentStatus = libraryMatch?.userStatus?.uppercase()
+                    val buttonText = when {
+                        currentStatus == "CURRENT" -> {
+                            val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                            if (ep != null) (if (isReadType) "Ch. $ep" else "Ep. $ep") else (if (isReadType) "Reading" else "Watching")
+                        }
+                        currentStatus == "COMPLETED" -> "Completed ✓"
+                        currentStatus == "PLANNING" -> "Plan to Watch"
+                        else -> if (isReadType) "Read" else "Watch"
+                    }
+
                     // Apple VisionOS-style Frosted Action Pill
                     Box(
                         modifier = Modifier
@@ -784,7 +852,8 @@ private fun CinematicHeroCard(
                             .clip(RoundedCornerShape(14.dp))
                             .background(
                                 Brush.horizontalGradient(
-                                    listOf(CyanAccent, BlueAccent)
+                                    if (currentStatus == "COMPLETED") listOf(GreenAccent, Color(0xFF248A3D))
+                                    else listOf(CyanAccent, BlueAccent)
                                 )
                             )
                             .clickable(
@@ -799,16 +868,16 @@ private fun CinematicHeroCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
-                                Icons.Default.PlayArrow,
+                                if (currentStatus == "COMPLETED") Icons.Default.Check else Icons.Default.PlayArrow,
                                 contentDescription = null,
-                                tint = Color(0xFF07080E),
+                                tint = if (currentStatus == "COMPLETED") Color.White else Color(0xFF07080E),
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = if (isReadType) "Reading" else "Watching",
+                                text = buttonText,
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF07080E)
+                                color = if (currentStatus == "COMPLETED") Color.White else Color(0xFF07080E)
                             )
                         }
                     }
@@ -845,12 +914,12 @@ private fun CinematicHeroCard(
 }
 
 /**
- * Compact Cards Row with Top 10 Ranks
+ * Compact Cards Row with Top 10 Ranks & Library Matching
  */
 @Composable
 private fun CompactCardRow(
     items: List<EnrichedMediaEntity>,
-    savedIds: Set<String>,
+    libraryLookup: (EnrichedMediaEntity) -> EnrichedMediaEntity?,
     isDark: Boolean,
     onWatchingClick: (EnrichedMediaEntity) -> Unit
 ) {
@@ -859,24 +928,30 @@ private fun CompactCardRow(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)
     ) {
         itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
+            val libraryMatch = libraryLookup(item)
+            val effectiveItem = libraryMatch ?: item
+            val isSaved = libraryMatch != null
+
             CompactGlassCard(
                 rank = index + 1,
-                media = item,
-                isSaved = savedIds.contains(item.id),
+                media = effectiveItem,
+                libraryMatch = libraryMatch,
+                isSaved = isSaved,
                 isDark = isDark,
-                onWatchingClick = { onWatchingClick(item) }
+                onWatchingClick = { onWatchingClick(effectiveItem) }
             )
         }
     }
 }
 
 /**
- * Refined Compact Glass Card with Full Title Breathing Room & Rank Glow
+ * Refined Compact Glass Card with Full Title, Age Rating & Synced Status
  */
 @Composable
 private fun CompactGlassCard(
     rank: Int,
     media: EnrichedMediaEntity,
+    libraryMatch: EnrichedMediaEntity?,
     isSaved: Boolean,
     isDark: Boolean,
     onWatchingClick: () -> Unit
@@ -945,45 +1020,78 @@ private fun CompactGlassCard(
                                 listOf(
                                     Color.Transparent,
                                     Color.Transparent,
-                                    Color.Black.copy(alpha = 0.65f)
+                                    Color.Black.copy(alpha = 0.70f)
                                 )
                             )
                         )
                 )
 
-                // Rank Badge with Metallic / Glowing Accents
-                val rankBg = when (rank) {
-                    1 -> Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
-                    2 -> Brush.horizontalGradient(listOf(Color(0xFFE0E0E0), Color(0xFFB0B0B0)))
-                    3 -> Brush.horizontalGradient(listOf(Color(0xFFCD7F32), Color(0xFF8B4513)))
-                    else -> Brush.horizontalGradient(
-                        listOf(
-                            Color.Black.copy(alpha = 0.82f),
-                            Color.Black.copy(alpha = 0.82f)
-                        )
-                    )
-                }
-                val rankTextColor = if (rank in 1..3) Color.Black else CyanAccent
-
-                Box(
+                // Top-Left Badges: Rank Badge & Age Rating Badge
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(rankBg)
-                        .border(
-                            0.6.dp,
-                            if (rank in 1..3) Color.White.copy(alpha = 0.5f) else CyanAccent.copy(alpha = 0.5f),
-                            RoundedCornerShape(7.dp)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "#$rank",
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = rankTextColor
-                    )
+                    val rankBg = when (rank) {
+                        1 -> Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
+                        2 -> Brush.horizontalGradient(listOf(Color(0xFFE0E0E0), Color(0xFFB0B0B0)))
+                        3 -> Brush.horizontalGradient(listOf(Color(0xFFCD7F32), Color(0xFF8B4513)))
+                        else -> Brush.horizontalGradient(
+                            listOf(
+                                Color.Black.copy(alpha = 0.82f),
+                                Color.Black.copy(alpha = 0.82f)
+                            )
+                        )
+                    }
+                    val rankTextColor = if (rank in 1..3) Color.Black else CyanAccent
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(rankBg)
+                            .border(
+                                0.6.dp,
+                                if (rank in 1..3) Color.White.copy(alpha = 0.5f) else CyanAccent.copy(alpha = 0.5f),
+                                RoundedCornerShape(7.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "#$rank",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = rankTextColor
+                        )
+                    }
+
+                    // Age Rating Badge on Poster
+                    if (!media.ageRating.isNullOrBlank()) {
+                        AgeRatingBadge(rating = media.ageRating, fontSize = 8.sp)
+                    }
+                }
+
+                // Top-Right: Library Status Badge if saved
+                if (libraryMatch != null) {
+                    val status = libraryMatch.userStatus.uppercase()
+                    val (sColor, sText) = when (status) {
+                        "CURRENT" -> CyanAccent to if (isReadType) "Reading" else "Watching"
+                        "COMPLETED" -> GreenAccent to "Done"
+                        "DROPPED" -> Color(0xFFFF453A) to "Drop"
+                        else -> PurpleAccent to "Plan"
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.80f))
+                            .border(0.6.dp, sColor.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text(text = sText, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = sColor)
+                    }
                 }
 
                 // Star Rating
@@ -1032,6 +1140,8 @@ private fun CompactGlassCard(
             Spacer(Modifier.height(3.dp))
 
             val sub = when {
+                libraryMatch?.episode != null -> "Ep. ${libraryMatch.episode}"
+                libraryMatch?.chapter != null -> "Ch. ${libraryMatch.chapter}"
                 media.episode != null -> "${media.episode} Episodes"
                 media.chapter != null -> "${media.chapter} Chapters"
                 media.year != null -> "${media.year}"
@@ -1045,15 +1155,27 @@ private fun CompactGlassCard(
 
             Spacer(Modifier.height(8.dp))
 
-            // iOS Glass Action Pill
+            // Synced iOS Glass Action Pill
+            val currentStatus = libraryMatch?.userStatus?.uppercase()
+            val buttonText = when {
+                currentStatus == "CURRENT" -> {
+                    val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                    if (ep != null) (if (isReadType) "Ch. $ep" else "Ep. $ep") else (if (isReadType) "Reading" else "Watching")
+                }
+                currentStatus == "COMPLETED" -> "Done ✓"
+                currentStatus == "PLANNING" -> "Plan"
+                else -> if (isReadType) "Read" else "Watch"
+            }
+            val buttonColor = if (currentStatus == "COMPLETED") GreenAccent else CyanAccent
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(CyanAccent.copy(alpha = 0.16f))
+                    .background(buttonColor.copy(alpha = 0.16f))
                     .border(
                         0.75.dp,
-                        CyanAccent.copy(alpha = 0.45f),
+                        buttonColor.copy(alpha = 0.45f),
                         RoundedCornerShape(10.dp)
                     )
                     .clickable(
@@ -1071,16 +1193,16 @@ private fun CompactGlassCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
+                        imageVector = if (currentStatus == "COMPLETED") Icons.Default.Check else Icons.Default.PlayArrow,
                         contentDescription = null,
-                        tint = CyanAccent,
+                        tint = buttonColor,
                         modifier = Modifier.size(11.dp)
                     )
                     Text(
-                        text = if (isReadType) "Read" else "Watch",
+                        text = buttonText,
                         fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CyanAccent
+                        color = buttonColor
                     )
                 }
             }
