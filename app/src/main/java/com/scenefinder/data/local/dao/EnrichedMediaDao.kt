@@ -36,6 +36,9 @@ interface EnrichedMediaDao {
     @Query("UPDATE enriched_media SET userStatus = :status, cachedAt = :cachedAt WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, cachedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE enriched_media SET userStatus = :status, episode = :episode, chapter = :chapter, cachedAt = :cachedAt WHERE id = :id")
+    suspend fun updateProgress(id: String, status: String, episode: Int?, chapter: Int?, cachedAt: Long = System.currentTimeMillis())
+
     @Query("UPDATE enriched_media SET userStatus = :status, cachedAt = :cachedAt WHERE id IN (:ids)")
     suspend fun updateStatusForIds(ids: List<String>, status: String, cachedAt: Long = System.currentTimeMillis())
 

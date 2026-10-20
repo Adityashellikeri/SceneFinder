@@ -104,6 +104,7 @@ import coil.request.ImageRequest
 import com.scenefinder.data.local.dao.EnrichedMediaDao
 import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.ui.components.AgeRatingBadge
+import com.scenefinder.ui.components.ProgressTrackingDialog
 import com.scenefinder.data.prefs.AppSettings
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.ui.theme.IGBlack
@@ -323,6 +324,7 @@ fun HistoryScreen(
 
     var itemToSaveWithStatus by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
+    var progressDialogMedia by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var selectedMediaIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val isSelectionMode = selectedMediaIds.isNotEmpty()
     val onCardClick = remember(isSelectionMode) {
@@ -773,7 +775,10 @@ fun HistoryScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    items(searchCategories) { (code, label) ->
+                    items(
+                        items = searchCategories,
+                        key = { it.first }
+                    ) { (code, label) ->
                         val selected = selectedSearchCategory == code
                         val bgColor by animateColorAsState(if (selected) IGGradMid else IGCard, tween(200), label = "cat_bg")
                         val textColor by animateColorAsState(if (selected) Color.White else IGTextSecondary, tween(200), label = "cat_text")
@@ -818,7 +823,10 @@ fun HistoryScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
                         ) {
-                            items(displayedPredictions) { suggestion ->
+                            items(
+                                items = displayedPredictions,
+                                key = { it }
+                            ) { suggestion ->
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(16.dp))
@@ -933,7 +941,10 @@ fun HistoryScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                 ) {
-                    items(statusFilters) { (code, label) ->
+                    items(
+                        items = statusFilters,
+                        key = { it.first }
+                    ) { (code, label) ->
                         val selected = selectedStatusFilter == code
                         val chipAccent = when (code) {
                             "CURRENT" -> Color(0xFF0095F6)
@@ -987,7 +998,10 @@ fun HistoryScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     modifier = Modifier.padding(bottom = 6.dp)
                 ) {
-                    items(mediaTypeFilters) { (code, label) ->
+                    items(
+                        items = mediaTypeFilters,
+                        key = { it.first }
+                    ) { (code, label) ->
                         val selected = selectedMediaTypeFilter == code
                         val typeAccent = if (code == "ALL") Color.White else getMediaTypeColor(code)
                         val chipColor by animateColorAsState(
@@ -1195,6 +1209,9 @@ fun HistoryScreen(
             media = latestMedia,
             onDismiss = { selectedMediaForDetail = null },
             onStatusChange = { newStatus ->
+                if (newStatus == "CURRENT") {
+                    progressDialogMedia = latestMedia.copy(userStatus = "CURRENT")
+                }
                 scope.launch(Dispatchers.IO) {
                     val synced = repository.updateMediaStatus(
                         media = latestMedia,
@@ -1208,6 +1225,9 @@ fun HistoryScreen(
                         Toast.makeText(context, if (synced) "Status updated & synced" else "Status updated", Toast.LENGTH_SHORT).show()
                     }
                 }
+            },
+            onTrackProgress = {
+                progressDialogMedia = latestMedia
             },
             onOpen = {
                 latestMedia.directWebUrl?.let { url ->
@@ -1238,6 +1258,9 @@ fun HistoryScreen(
             media = item,
             onDismiss = { itemToSaveWithStatus = null },
             onStatusSelected = { chosenStatus ->
+                if (chosenStatus == "CURRENT") {
+                    progressDialogMedia = item.copy(userStatus = "CURRENT")
+                }
                 scope.launch(Dispatchers.IO) {
                     val toSave = item.copy(userStatus = chosenStatus, cachedAt = System.currentTimeMillis())
                     val synced = repository.saveToLibrary(
@@ -1261,6 +1284,38 @@ fun HistoryScreen(
                     }
                 }
                 itemToSaveWithStatus = null
+            }
+        )
+    }
+
+    // Interactive progress popup for episode or chapter tracking
+    progressDialogMedia?.let { media ->
+        ProgressTrackingDialog(
+            media = media,
+            onDismiss = { progressDialogMedia = null },
+            onSaveProgress = { m, ep, ch ->
+                progressDialogMedia = null
+                scope.launch(Dispatchers.IO) {
+                    repository.saveToLibrary(
+                        media = m.copy(userStatus = "CURRENT", episode = ep, chapter = ch),
+                        anilistToken = anilistToken,
+                        tmdbApiKey = apiKey,
+                        tmdbSessionId = tmdbSessionId,
+                        tmdbAccountId = tmdbAccountId
+                    )
+                    repository.updateMediaProgress(
+                        media = m,
+                        newStatus = "CURRENT",
+                        episode = ep,
+                        chapter = ch,
+                        anilistToken = anilistToken
+                    )
+                    launch(Dispatchers.Main) {
+                        val isManga = m.mediaType.equals("Manga", true) || m.mediaType.equals("Manhwa", true)
+                        val unit = if (isManga) "Ch. ${ch ?: 1}" else "Ep. ${ep ?: 1}"
+                        Toast.makeText(context, "Progress updated ($unit)", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         )
     }
@@ -1639,8 +1694,9 @@ private fun IGPosterCard(
         ImageRequest.Builder(context)
             .data(media.posterUrl)
             .size(360, 540)
-            .crossfade(160)
+            .crossfade(140)
             .allowHardware(true)
+            .allowRgb565(true)
             .memoryCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .build()
@@ -1846,6 +1902,7 @@ private fun MediaDetailDialog(
     media: EnrichedMediaEntity,
     onDismiss: () -> Unit,
     onStatusChange: (String) -> Unit,
+    onTrackProgress: () -> Unit = {},
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -2007,7 +2064,10 @@ private fun MediaDetailDialog(
                                     color = rowBorder,
                                     shape = RoundedCornerShape(10.dp)
                                 )
-                                .clickable { onStatusChange(code) }
+                                .clickable {
+                                    onStatusChange(code)
+                                    if (code == "CURRENT") onTrackProgress()
+                                }
                                 .padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -2018,7 +2078,7 @@ private fun MediaDetailDialog(
                                         .size(10.dp)
                                         .clip(CircleShape)
                                         .background(color)
-                                )
+                                 )
                                 Spacer(Modifier.width(10.dp))
                                 Text(
                                     label,
@@ -2033,6 +2093,65 @@ private fun MediaDetailDialog(
                                 exit = fadeOut(tween(120)) + scaleOut(tween(120))
                             ) {
                                 Icon(Icons.Default.Check, contentDescription = "Selected", tint = color, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+
+                // Episode / Chapter Progress Tracker Card
+                val isEpisodic = media.mediaType.equals("Anime", true) ||
+                        media.mediaType.equals("Manga", true) ||
+                        media.mediaType.equals("Manhwa", true) ||
+                        media.mediaType.contains("TV", true) ||
+                        media.mediaType.contains("Series", true)
+
+                if (isEpisodic) {
+                    val isMangaType = media.mediaType.equals("Manga", true) || media.mediaType.equals("Manhwa", true)
+                    val currentVal = if (isMangaType) media.chapter ?: 0 else media.episode ?: 0
+                    val unitName = if (isMangaType) "Chapter" else "Episode"
+
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        onClick = onTrackProgress,
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF0095F6).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFF0095F6).copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    "CURRENT PROGRESS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0095F6),
+                                    letterSpacing = 0.8.sp
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    if (currentVal > 0) "$unitName $currentVal" else "Not started yet",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = IGTextPrimary
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF0095F6),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 10.dp)
+                                ) {
+                                    Text("Track", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }

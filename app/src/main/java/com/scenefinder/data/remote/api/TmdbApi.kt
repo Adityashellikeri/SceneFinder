@@ -27,6 +27,32 @@ interface TmdbApi {
         @Path("tv_id") tvId: Int,
         @Query("api_key") apiKey: String
     ): TmdbTvContentRatingsResponse
+
+    @GET("3/trending/movie/week")
+    suspend fun getTrendingMovies(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String = "en-US"
+    ): TmdbSearchResponse
+
+    @GET("3/trending/tv/week")
+    suspend fun getTrendingTv(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String = "en-US"
+    ): TmdbSearchResponse
+
+    @GET("3/movie/top_rated")
+    suspend fun getTopRatedMovies(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String = "en-US",
+        @Query("page") page: Int = 1
+    ): TmdbSearchResponse
+
+    @GET("3/tv/top_rated")
+    suspend fun getTopRatedTv(
+        @Query("api_key") apiKey: String,
+        @Query("language") language: String = "en-US",
+        @Query("page") page: Int = 1
+    ): TmdbSearchResponse
 }
 
 @JsonClass(generateAdapter = true)

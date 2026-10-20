@@ -476,22 +476,32 @@ class SceneAccessibilityService : AccessibilityService() {
                         hardwareBuffer.close()
 
                         if (bitmap != null) {
-                            val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-                            serviceScope.launch(Dispatchers.Default) {
-                                val ocrLines = ocrService.processImage(softwareBitmap)
-                                val candidates = candidateExtractor.extractCandidates(ocrLines, "OCR Fallback")
+                            val softwareBitmap = try {
+                                bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                            } finally {
+                                try { bitmap.recycle() } catch (_: Exception) {}
+                            }
+                            if (softwareBitmap != null) {
+                                serviceScope.launch(Dispatchers.Default) {
+                                    try {
+                                        val ocrLines = ocrService.processImage(softwareBitmap)
+                                        val candidates = candidateExtractor.extractCandidates(ocrLines, "OCR Fallback")
 
-                                for (candidate in candidates.take(3)) {
-                                    val apiKey = appSettings.tmdbApiKey.value
-                                    val enriched = enrichmentRepository.enrichCandidate(candidate, apiKey)
-                                    if (enriched != null) {
-                                        sessionManager.log("Verified OCR Match: ${enriched.cleanTitle} [${enriched.mediaType}]")
-                                        if (appSettings.autoOverlay.value) {
-                                            launch(Dispatchers.Main) {
-                                                OverlayActivity.show(applicationContext, enriched)
+                                        for (candidate in candidates.take(3)) {
+                                            val apiKey = appSettings.tmdbApiKey.value
+                                            val enriched = enrichmentRepository.enrichCandidate(candidate, apiKey)
+                                            if (enriched != null) {
+                                                sessionManager.log("Verified OCR Match: ${enriched.cleanTitle} [${enriched.mediaType}]")
+                                                if (appSettings.autoOverlay.value) {
+                                                    launch(Dispatchers.Main) {
+                                                        OverlayActivity.show(applicationContext, enriched)
+                                                    }
+                                                }
+                                                break
                                             }
                                         }
-                                        break
+                                    } finally {
+                                        try { softwareBitmap.recycle() } catch (_: Exception) {}
                                     }
                                 }
                             }
@@ -562,32 +572,42 @@ class SceneAccessibilityService : AccessibilityService() {
                             hardwareBuffer.close()
 
                             if (bitmap != null) {
-                                val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-                                serviceScope.launch(Dispatchers.Default) {
-                                    val apiKey = appSettings.tmdbApiKey.value
-                                    val enriched = enrichmentRepository.recognizeSceneFromBitmap(
-                                        bitmap = softwareBitmap,
-                                        ocrService = ocrService,
-                                        candidateExtractor = candidateExtractor,
-                                        tmdbApiKey = apiKey
-                                    )
+                                val softwareBitmap = try {
+                                    bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                                } finally {
+                                    try { bitmap.recycle() } catch (_: Exception) {}
+                                }
+                                if (softwareBitmap != null) {
+                                    serviceScope.launch(Dispatchers.Default) {
+                                        try {
+                                            val apiKey = appSettings.tmdbApiKey.value
+                                            val enriched = enrichmentRepository.recognizeSceneFromBitmap(
+                                                bitmap = softwareBitmap,
+                                                ocrService = ocrService,
+                                                candidateExtractor = candidateExtractor,
+                                                tmdbApiKey = apiKey
+                                            )
 
-                                    launch(Dispatchers.Main) {
-                                        if (enriched != null) {
-                                            sessionManager.log("Direct Scene Recognized: ${enriched.cleanTitle} [${enriched.mediaType}]")
-                                            Toast.makeText(
-                                                applicationContext,
-                                                "Identified: ${enriched.cleanTitle} (${enriched.mediaType})",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                            OverlayActivity.show(applicationContext, enriched)
-                                        } else {
-                                            sessionManager.log("No direct scene match found")
-                                            Toast.makeText(
-                                                applicationContext,
-                                                "No scene match found. Try Circle to Search!",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            launch(Dispatchers.Main) {
+                                                if (enriched != null) {
+                                                    sessionManager.log("Direct Scene Recognized: ${enriched.cleanTitle} [${enriched.mediaType}]")
+                                                    Toast.makeText(
+                                                        applicationContext,
+                                                        "Identified: ${enriched.cleanTitle} (${enriched.mediaType})",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                    OverlayActivity.show(applicationContext, enriched)
+                                                } else {
+                                                    sessionManager.log("No direct scene match found")
+                                                    Toast.makeText(
+                                                        applicationContext,
+                                                        "No scene match found. Try Circle to Search!",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        } finally {
+                                            try { softwareBitmap.recycle() } catch (_: Exception) {}
                                         }
                                     }
                                 }

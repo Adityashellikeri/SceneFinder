@@ -40,6 +40,9 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,7 +75,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scenefinder.data.prefs.AppSettings
-import com.scenefinder.data.prefs.AppTheme
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.ui.theme.IGBlack
 import com.scenefinder.ui.theme.IGBlue
@@ -87,9 +89,8 @@ import com.scenefinder.ui.theme.IGSurface
 import com.scenefinder.ui.theme.IGTextPrimary
 import com.scenefinder.ui.theme.IGTextSecondary
 import com.scenefinder.ui.theme.IGTextTertiary
-import com.scenefinder.ui.theme.LocalAppThemeColors
-import com.scenefinder.ui.theme.EasterEggType
-import com.scenefinder.ui.theme.ThemeEasterEggDialog
+import com.scenefinder.ui.theme.LocalAppColors
+import com.scenefinder.data.prefs.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -126,7 +127,6 @@ fun SettingsScreen(
     var isSyncing by remember { mutableStateOf(false) }
     var tmdbLoginPending by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
-    var activeEasterEgg by remember { mutableStateOf<EasterEggType?>(null) }
 
     val isAnilistConnected = currentToken.isNotBlank()
     val isTmdbConnected = tmdbSessionId.isNotBlank() && tmdbAccountId >= 0
@@ -858,96 +858,54 @@ fun SettingsScreen(
             }
         }
 
-        // ── Theme & Visual Style Card ──────────────────────────────────────────
+        // ── Appearance (Dark & Light Mode) ────────────────────────────────────
         item {
-            val currentTheme by settings.theme.collectAsState()
-            val tc = LocalAppThemeColors.current
+            val themeMode by settings.themeMode.collectAsState()
+            val colors = LocalAppColors.current
 
             IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 IGSettingsSectionHeader(
-                    icon = Icons.Default.Key,
-                    title = "Theme & Visual Style",
-                    subtitle = "Choose your SceneFinder aesthetic"
+                    icon = Icons.Default.BrightnessMedium,
+                    title = "Appearance",
+                    subtitle = "Choose Dark or Light mode"
                 )
                 Spacer(Modifier.height(14.dp))
 
-                val themes = listOf(
-                    Triple(AppTheme.NEO_BRUTALISM,  "⚡", "Neo-Brutalism"),
-                    Triple(AppTheme.CYBERPUNK_2077, "🤖", "Cyberpunk 2077"),
-                    Triple(AppTheme.IRON_MAN,       "🦾", "Iron Man"),
-                    Triple(AppTheme.DARK_MINIMAL,   "🖤", "Dark Minimal")
-                )
-
-                themes.forEach { (theme, emoji, label) ->
-                    val isSelected = currentTheme == theme
-                    val bgColor by animateColorAsState(
-                        targetValue = if (isSelected) tc.primary.copy(alpha = 0.15f) else IGCard,
-                        animationSpec = tween(200),
-                        label = "theme_bg"
-                    )
-                    val borderColor by animateColorAsState(
-                        targetValue = if (isSelected) tc.primary else IGDivider,
-                        animationSpec = tween(200),
-                        label = "theme_border"
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(bgColor)
-                            .border(1.5.dp, borderColor, RoundedCornerShape(10.dp))
-                            .clickable { settings.setTheme(theme) }
-                            .padding(horizontal = 14.dp, vertical = 11.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (colors.isDark) Color(0xFF141416) else Color(0xFFF1F3F5))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ThemeMode.values().forEach { mode ->
+                        val isSelected = themeMode == mode
+                        val bg by animateColorAsState(
+                            targetValue = if (isSelected) (if (colors.isDark) Color(0xFF2C2C34) else Color.White) else Color.Transparent,
+                            animationSpec = tween(150),
+                            label = "mode_bg"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(bg)
+                                .clickable { settings.setThemeMode(mode) }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(text = emoji, fontSize = 20.sp)
-                            Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(text = mode.icon, fontSize = 14.sp)
                                 Text(
-                                    text = label,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = if (isSelected) tc.primary else IGTextPrimary
+                                    text = mode.title.replace(" Mode", ""),
+                                    color = if (isSelected) colors.primary else colors.textSecondary,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 12.sp
                                 )
-                                Text(
-                                    text = theme.tagline,
-                                    fontSize = 11.sp,
-                                    color = IGTextSecondary
-                                )
-                            }
-                            if (isSelected) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(tc.primary.copy(alpha = 0.2f))
-                                            .border(1.dp, tc.primary, RoundedCornerShape(6.dp))
-                                            .clickable {
-                                                activeEasterEgg = when (theme) {
-                                                    AppTheme.CYBERPUNK_2077 -> EasterEggType.CyberpunkRelic
-                                                    AppTheme.IRON_MAN       -> EasterEggType.IronManProtocol
-                                                    AppTheme.NEO_BRUTALISM  -> EasterEggType.NeoBrutalistOverdrive
-                                                    AppTheme.DARK_MINIMAL   -> EasterEggType.OnePieceGear5
-                                                }
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    ) {
-                                        Text("🎁 Easter Egg", fontSize = 10.sp, fontWeight = FontWeight.Black, color = tc.primary)
-                                    }
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
-                                        tint = tc.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
                             }
                         }
                     }
@@ -1026,20 +984,17 @@ fun SettingsScreen(
             shape = RoundedCornerShape(16.dp)
         )
     }
-
-    activeEasterEgg?.let { egg ->
-        ThemeEasterEggDialog(egg = egg, onDismiss = { activeEasterEgg = null })
-    }
 }
 
 @Composable
 private fun IGSettingsCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val colors = LocalAppColors.current
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(IGSurface)
-            .border(0.5.dp, IGDivider, RoundedCornerShape(16.dp))
+            .background(colors.surface)
+            .border(0.5.dp, colors.divider, RoundedCornerShape(16.dp))
             .padding(16.dp)
     ) {
         Column { content() }
@@ -1048,19 +1003,20 @@ private fun IGSettingsCard(modifier: Modifier = Modifier, content: @Composable (
 
 @Composable
 private fun IGSettingsSectionHeader(icon: ImageVector, title: String, subtitle: String) {
+    val colors = LocalAppColors.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(IGCard),
+                .background(colors.card),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, null, tint = IGGradMid, modifier = Modifier.size(18.dp))
         }
         Column {
-            Text(title, fontWeight = FontWeight.SemiBold, color = IGTextPrimary, fontSize = 15.sp)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = IGTextSecondary)
+            Text(title, fontWeight = FontWeight.SemiBold, color = colors.textPrimary, fontSize = 15.sp)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
         }
     }
 }

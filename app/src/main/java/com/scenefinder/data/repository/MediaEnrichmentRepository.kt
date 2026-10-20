@@ -1,6 +1,7 @@
 package com.scenefinder.data.repository
 
 import android.graphics.Bitmap
+import androidx.collection.LruCache
 import androidx.paging.PagingSource
 import com.scenefinder.data.local.dao.EnrichedMediaDao
 import com.scenefinder.data.local.entity.EnrichedMediaEntity
@@ -19,6 +20,7 @@ import com.scenefinder.domain.parser.CandidateExtractor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -102,6 +104,19 @@ class MediaEnrichmentRepository @Inject constructor(
         }
     }
     private val cacheExpirationMillis = TimeUnit.DAYS.toMillis(7)
+
+    private val searchCache = LruCache<String, List<EnrichedMediaEntity>>(100)
+    private val candidateCache = LruCache<String, EnrichedMediaEntity>(150)
+
+    fun clearMemoryCache() {
+        searchCache.evictAll()
+        candidateCache.evictAll()
+    }
+
+    fun trimMemoryCache(maxEntries: Int) {
+        searchCache.trimToSize(maxEntries)
+        candidateCache.trimToSize(maxEntries)
+    }
 
     fun getRecentHistory(): Flow<List<EnrichedMediaEntity>> = dao.getRecentHistory()
 
@@ -452,6 +467,8 @@ class MediaEnrichmentRepository @Inject constructor(
     suspend fun searchAllMedia(query: String, tmdbApiKey: String = ""): List<EnrichedMediaEntity> = coroutineScope {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return@coroutineScope emptyList()
+        val cacheKey = trimmed.lowercase()
+        searchCache.get(cacheKey)?.let { return@coroutineScope it }
 
         val aniListDeferred = async(Dispatchers.IO) {
             val list = mutableListOf<EnrichedMediaEntity>()
@@ -587,7 +604,11 @@ class MediaEnrichmentRepository @Inject constructor(
             list
         }
 
-        (aniListDeferred.await() + tmdbDeferred.await() + mangaDexDeferred.await()).distinctBy { it.id }
+        val results = (aniListDeferred.await() + tmdbDeferred.await() + mangaDexDeferred.await()).distinctBy { it.id }
+        if (results.isNotEmpty()) {
+            searchCache.put(cacheKey, results)
+        }
+        results
     }
 
     suspend fun enrichCandidate(
@@ -596,6 +617,7 @@ class MediaEnrichmentRepository @Inject constructor(
     ): EnrichedMediaEntity? {
         val searchKey = candidate.cleanTitle.trim().lowercase()
         if (searchKey.isBlank()) return null
+        candidateCache.get(searchKey)?.let { return it }
 
         val cached = dao.getBySearchKey(searchKey)
         if (cached != null && (System.currentTimeMillis() - cached.cachedAt) < cacheExpirationMillis) {
@@ -616,6 +638,9 @@ class MediaEnrichmentRepository @Inject constructor(
             }
         }
 
+        if (enriched != null) {
+            candidateCache.put(searchKey, enriched)
+        }
         return enriched
     }
 
@@ -629,6 +654,8 @@ class MediaEnrichmentRepository @Inject constructor(
         tmdbApiKey: String = ""
     ): List<EnrichedMediaEntity> = coroutineScope {
         val effectiveKey = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+        val relatedCacheKey = "related_" + candidate.cleanTitle.trim().lowercase()
+        searchCache.get(relatedCacheKey)?.let { return@coroutineScope it }
 
         val animeDeferred = async { searchAniList(candidate, "ANIME") }
         val mangaDeferred = async { searchAniList(candidate, "MANGA") }
@@ -645,6 +672,9 @@ class MediaEnrichmentRepository @Inject constructor(
             if (results.none { it.id == item.id || (it.mediaType == item.mediaType && it.cleanTitle.equals(item.cleanTitle, ignoreCase = true)) }) {
                 results.add(item)
             }
+        }
+        if (results.isNotEmpty()) {
+            searchCache.put(relatedCacheKey, results)
         }
         results
     }
@@ -908,12 +938,14 @@ class MediaEnrichmentRepository @Inject constructor(
         val effectiveApiKey = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
 
         // 1. Anime Scene Recognition via trace.moe visual search
+        var cropped: Bitmap? = null
+        var scaled: Bitmap? = null
         try {
             // Crop letterbox black bars first (common on 20:9 phones) so trace.moe
             // gets the actual scene pixels, not distorted by bars.
-            val cropped = autoCropLetterbox(bitmap)
+            cropped = autoCropLetterbox(bitmap)
             val maxDim = maxOf(cropped.width, cropped.height)
-            val scaled = if (maxDim > 1280) {
+            scaled = if (maxDim > 1280) {
                 val scale = 1280f / maxDim
                 Bitmap.createScaledBitmap(cropped, (cropped.width * scale).toInt(), (cropped.height * scale).toInt(), true)
             } else {
@@ -975,6 +1007,13 @@ class MediaEnrichmentRepository @Inject constructor(
             }
         } catch (_: Exception) {
             // Ignore trace.moe error and proceed to OCR
+        } finally {
+            if (scaled != null && scaled !== cropped && scaled !== bitmap) {
+                try { scaled.recycle() } catch (_: Exception) {}
+            }
+            if (cropped != null && cropped !== bitmap) {
+                try { cropped.recycle() } catch (_: Exception) {}
+            }
         }
 
         // 2. Alternative Scene Recognition: Manga, Manhwa, Movies & TV Shows via OCR
@@ -1373,4 +1412,323 @@ class MediaEnrichmentRepository @Inject constructor(
     suspend fun getTmdbRequestToken(apiKey: String): String? = try {
         tmdbAccountApi.createRequestToken(apiKey).requestToken
     } catch (_: Exception) { null }
+
+    /**
+     * Free Recommendation Algorithm:
+     * Discovers personalized recommendations based on genres/formats found in user's library,
+     * or trending masterpieces if library is empty.
+     */
+    suspend fun getHomeRecommendations(userLibrary: List<EnrichedMediaEntity>): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        val cached = searchCache.get("home_recommendations")
+        if (cached != null) return@withContext cached
+
+        val recommended = mutableListOf<EnrichedMediaEntity>()
+        val libraryTitles = userLibrary.map { it.cleanTitle.lowercase() }.toSet()
+
+        try {
+            val gql = """
+                query {
+                  Page(page: 1, perPage: 10) {
+                    media(type: ANIME, sort: [TRENDING_DESC, SCORE_DESC], isAdult: false) {
+                      id title { english romaji native }
+                      type format episodes averageScore description
+                      coverImage { extraLarge large } bannerImage siteUrl
+                      genres isAdult tags { name isAdult rank }
+                    }
+                  }
+                }
+            """.trimIndent()
+            val resp = aniListApi.queryMedia(AniListGraphQLRequest(gql, emptyMap()))
+            resp.data?.page?.media?.forEach { item ->
+                val title = item.title?.english ?: item.title?.romaji ?: "Anime"
+                if (!libraryTitles.contains(title.lowercase())) {
+                    recommended.add(
+                        EnrichedMediaEntity(
+                            id = "anilist_anime_${item.id}",
+                            searchKey = title.lowercase(),
+                            cleanTitle = title,
+                            englishTitle = item.title?.english,
+                            originalTitle = item.title?.romaji,
+                            mediaType = "Anime",
+                            year = null,
+                            season = null,
+                            episode = item.episodes,
+                            chapter = null,
+                            overview = stripHtml(item.description),
+                            posterUrl = item.coverImage?.extraLarge ?: item.coverImage?.large,
+                            bannerUrl = item.bannerImage,
+                            rating = item.averageScore?.let { it / 10f },
+                            sourceService = "AniList",
+                            directWebUrl = item.siteUrl ?: "https://anilist.co/anime/${item.id}",
+                            userStatus = "PLANNING",
+                            ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Anime")
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        if (recommended.isNotEmpty()) {
+            searchCache.put("home_recommendations", recommended)
+        }
+        recommended
+    }
+
+    suspend fun getTopAnime(): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        val cached = searchCache.get("top_anime")
+        if (cached != null) return@withContext cached
+        val list = mutableListOf<EnrichedMediaEntity>()
+        try {
+            val gql = """
+                query {
+                  Page(page: 1, perPage: 12) {
+                    media(type: ANIME, sort: [SCORE_DESC, POPULARITY_DESC], isAdult: false) {
+                      id title { english romaji native }
+                      type format episodes averageScore description
+                      coverImage { extraLarge large } bannerImage siteUrl
+                      genres isAdult tags { name isAdult rank }
+                    }
+                  }
+                }
+            """.trimIndent()
+            val resp = aniListApi.queryMedia(AniListGraphQLRequest(gql, emptyMap()))
+            resp.data?.page?.media?.forEach { item ->
+                val title = item.title?.english ?: item.title?.romaji ?: "Anime"
+                list.add(
+                    EnrichedMediaEntity(
+                        id = "anilist_anime_${item.id}",
+                        searchKey = title.lowercase(),
+                        cleanTitle = title,
+                        englishTitle = item.title?.english,
+                        originalTitle = item.title?.romaji,
+                        mediaType = "Anime",
+                        year = null,
+                        season = null,
+                        episode = item.episodes,
+                        chapter = null,
+                        overview = stripHtml(item.description),
+                        posterUrl = item.coverImage?.extraLarge ?: item.coverImage?.large,
+                        bannerUrl = item.bannerImage,
+                        rating = item.averageScore?.let { it / 10f },
+                        sourceService = "AniList",
+                        directWebUrl = item.siteUrl ?: "https://anilist.co/anime/${item.id}",
+                        userStatus = "PLANNING",
+                        ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Anime")
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        if (list.isNotEmpty()) searchCache.put("top_anime", list)
+        list
+    }
+
+    suspend fun getTopManga(): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        val cached = searchCache.get("top_manga")
+        if (cached != null) return@withContext cached
+        val list = mutableListOf<EnrichedMediaEntity>()
+        try {
+            val gql = """
+                query {
+                  Page(page: 1, perPage: 12) {
+                    media(type: MANGA, format_in: [MANGA], sort: [SCORE_DESC, POPULARITY_DESC], isAdult: false) {
+                      id title { english romaji native }
+                      type format chapters averageScore description
+                      coverImage { extraLarge large } bannerImage siteUrl
+                      genres isAdult tags { name isAdult rank }
+                    }
+                  }
+                }
+            """.trimIndent()
+            val resp = aniListApi.queryMedia(AniListGraphQLRequest(gql, emptyMap()))
+            resp.data?.page?.media?.forEach { item ->
+                val title = item.title?.english ?: item.title?.romaji ?: "Manga"
+                list.add(
+                    EnrichedMediaEntity(
+                        id = "anilist_manga_${item.id}",
+                        searchKey = title.lowercase(),
+                        cleanTitle = title,
+                        englishTitle = item.title?.english,
+                        originalTitle = item.title?.romaji,
+                        mediaType = "Manga",
+                        year = null,
+                        season = null,
+                        episode = null,
+                        chapter = item.chapters,
+                        overview = stripHtml(item.description),
+                        posterUrl = item.coverImage?.extraLarge ?: item.coverImage?.large,
+                        bannerUrl = item.bannerImage,
+                        rating = item.averageScore?.let { it / 10f },
+                        sourceService = "AniList",
+                        directWebUrl = item.siteUrl ?: "https://anilist.co/manga/${item.id}",
+                        userStatus = "PLANNING",
+                        ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Manga")
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        if (list.isNotEmpty()) searchCache.put("top_manga", list)
+        list
+    }
+
+    suspend fun getTopManhwa(): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        val cached = searchCache.get("top_manhwa")
+        if (cached != null) return@withContext cached
+        val list = mutableListOf<EnrichedMediaEntity>()
+        try {
+            val gql = """
+                query {
+                  Page(page: 1, perPage: 12) {
+                    media(type: MANGA, countryOfOrigin: "KR", sort: [SCORE_DESC, POPULARITY_DESC], isAdult: false) {
+                      id title { english romaji native }
+                      type format chapters averageScore description
+                      coverImage { extraLarge large } bannerImage siteUrl
+                      genres isAdult tags { name isAdult rank }
+                    }
+                  }
+                }
+            """.trimIndent()
+            val resp = aniListApi.queryMedia(AniListGraphQLRequest(gql, emptyMap()))
+            resp.data?.page?.media?.forEach { item ->
+                val title = item.title?.english ?: item.title?.romaji ?: "Manhwa"
+                list.add(
+                    EnrichedMediaEntity(
+                        id = "anilist_manhwa_${item.id}",
+                        searchKey = title.lowercase(),
+                        cleanTitle = title,
+                        englishTitle = item.title?.english,
+                        originalTitle = item.title?.romaji,
+                        mediaType = "Manhwa",
+                        year = null,
+                        season = null,
+                        episode = null,
+                        chapter = item.chapters,
+                        overview = stripHtml(item.description),
+                        posterUrl = item.coverImage?.extraLarge ?: item.coverImage?.large,
+                        bannerUrl = item.bannerImage,
+                        rating = item.averageScore?.let { it / 10f },
+                        sourceService = "AniList",
+                        directWebUrl = item.siteUrl ?: "https://anilist.co/manga/${item.id}",
+                        userStatus = "PLANNING",
+                        ageRating = resolveAniListAgeRating(item.isAdult, item.genres, item.tags, "Manhwa")
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        if (list.isNotEmpty()) searchCache.put("top_manhwa", list)
+        list
+    }
+
+    suspend fun getTopMovies(apiKey: String = ""): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        val cached = searchCache.get("top_movies")
+        if (cached != null) return@withContext cached
+        val key = apiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+        val list = mutableListOf<EnrichedMediaEntity>()
+        try {
+            val resp = tmdbApi.getTopRatedMovies(key)
+            resp.results?.take(12)?.forEach { item ->
+                list.add(
+                    EnrichedMediaEntity(
+                        id = "tmdb_movie_${item.id}",
+                        searchKey = item.displayTitle.lowercase(),
+                        cleanTitle = item.displayTitle,
+                        englishTitle = item.title,
+                        originalTitle = item.originalTitle,
+                        mediaType = "Movie",
+                        year = item.releaseDate?.take(4)?.toIntOrNull(),
+                        season = null,
+                        episode = null,
+                        chapter = null,
+                        overview = item.overview,
+                        posterUrl = item.fullPosterUrl,
+                        bannerUrl = item.fullBackdropUrl,
+                        rating = item.voteAverage?.let { it / 1f },
+                        sourceService = "TMDB",
+                        directWebUrl = "https://www.themoviedb.org/movie/${item.id}",
+                        userStatus = "PLANNING",
+                        ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "Movie")
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        if (list.isNotEmpty()) searchCache.put("top_movies", list)
+        list
+    }
+
+    suspend fun getTopTvSeries(apiKey: String = ""): List<EnrichedMediaEntity> = withContext(Dispatchers.IO) {
+        val cached = searchCache.get("top_tv")
+        if (cached != null) return@withContext cached
+        val key = apiKey.ifBlank { DEFAULT_TMDB_API_KEY }
+        val list = mutableListOf<EnrichedMediaEntity>()
+        try {
+            val resp = tmdbApi.getTopRatedTv(key)
+            resp.results?.take(12)?.forEach { item ->
+                list.add(
+                    EnrichedMediaEntity(
+                        id = "tmdb_tv_${item.id}",
+                        searchKey = item.displayTitle.lowercase(),
+                        cleanTitle = item.displayTitle,
+                        englishTitle = item.name,
+                        originalTitle = item.originalName,
+                        mediaType = "TV Shows",
+                        year = item.firstAirDate?.take(4)?.toIntOrNull(),
+                        season = null,
+                        episode = null,
+                        chapter = null,
+                        overview = item.overview,
+                        posterUrl = item.fullPosterUrl,
+                        bannerUrl = item.fullBackdropUrl,
+                        rating = item.voteAverage?.let { it / 1f },
+                        sourceService = "TMDB",
+                        directWebUrl = "https://www.themoviedb.org/tv/${item.id}",
+                        userStatus = "PLANNING",
+                        ageRating = resolveAgeRating(isAdult = item.adult, genreIds = item.genreIds, mediaType = "TV Shows")
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        if (list.isNotEmpty()) searchCache.put("top_tv", list)
+        list
+    }
+
+    suspend fun updateMediaProgress(
+        media: EnrichedMediaEntity,
+        newStatus: String = "CURRENT",
+        episode: Int?,
+        chapter: Int?,
+        anilistToken: String = ""
+    ): Boolean {
+        dao.updateProgress(media.id, newStatus, episode, chapter, System.currentTimeMillis())
+
+        val isAnime = media.mediaType.equals("Anime", ignoreCase = true)
+        val isManga = media.mediaType.equals("Manga", ignoreCase = true) || media.mediaType.equals("Manhwa", ignoreCase = true)
+        val cleanAniToken = anilistToken.trim().removePrefix("Bearer ").trim()
+
+        if ((isAnime || isManga || media.sourceService == "AniList") && cleanAniToken.isNotBlank()) {
+            val numericId = media.id.substringAfterLast("_").toIntOrNull()
+            if (numericId != null) {
+                try {
+                    val progressCount = if (isAnime) episode else chapter
+                    val mutation = """
+                        mutation (${"$"}mediaId: Int, ${"$"}status: MediaListStatus, ${"$"}progress: Int) {
+                          SaveMediaListEntry(mediaId: ${"$"}mediaId, status: ${"$"}status, progress: ${"$"}progress) {
+                            id
+                            status
+                            progress
+                          }
+                        }
+                    """.trimIndent()
+                    val vars = mutableMapOf<String, Any?>(
+                        "mediaId" to numericId,
+                        "status" to "CURRENT"
+                    )
+                    if (progressCount != null) {
+                        vars["progress"] = progressCount
+                    }
+                    aniListApi.executeMutation("Bearer $cleanAniToken", AniListGraphQLRequest(mutation, vars))
+                    return true
+                } catch (_: Exception) {}
+            }
+        }
+        return true
+    }
 }

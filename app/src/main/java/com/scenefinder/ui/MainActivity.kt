@@ -28,10 +28,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,11 +58,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.VideoLibrary
+import com.scenefinder.ui.home.HomeScreen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -98,21 +96,13 @@ import com.scenefinder.ui.theme.IGSurface
 import com.scenefinder.ui.theme.IGTextPrimary
 import com.scenefinder.ui.theme.IGTextSecondary
 import com.scenefinder.ui.theme.SceneFinderTheme
-import com.scenefinder.ui.theme.LocalAppThemeColors
-import com.scenefinder.ui.theme.ThemeAmbientOverlay
-import com.scenefinder.ui.theme.ThemeStartupIntro
-import com.scenefinder.ui.theme.getThemeColors
-import com.scenefinder.data.prefs.AppTheme
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.tween
-import androidx.compose.runtime.mutableStateOf
+import com.scenefinder.ui.theme.LocalAppColors
+import com.scenefinder.data.prefs.ThemeMode
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -153,30 +143,15 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val currentTheme by settings.theme.collectAsState()
-            var showStartupIntro by remember { mutableStateOf(true) }
-
-            SceneFinderTheme(theme = currentTheme) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    MainAppScaffold(
-                        sessionManager = sessionManager,
-                        launcher = launcher,
-                        dao = dao,
-                        repository = repository,
-                        settings = settings
-                    )
-
-                    AnimatedVisibility(
-                        visible = showStartupIntro,
-                        enter = fadeIn(),
-                        exit = fadeOut(tween(400))
-                    ) {
-                        ThemeStartupIntro(
-                            theme = currentTheme,
-                            onFinished = { showStartupIntro = false }
-                        )
-                    }
-                }
+            val themeMode by settings.themeMode.collectAsState()
+            SceneFinderTheme(themeMode = themeMode) {
+                MainAppScaffold(
+                    sessionManager = sessionManager,
+                    launcher = launcher,
+                    dao = dao,
+                    repository = repository,
+                    settings = settings
+                )
             }
         }
     }
@@ -200,7 +175,7 @@ class MainActivity : ComponentActivity() {
         val key = settings.tmdbApiKey.value.ifBlank { MediaEnrichmentRepository.DEFAULT_TMDB_API_KEY }
         if (pendingTmdb.startsWith("__pending__:")) {
             val token = pendingTmdb.removePrefix("__pending__:")
-            kotlinx.coroutines.MainScope().launch {
+            lifecycleScope.launch {
                 val res = withContext(Dispatchers.IO) { repository.createTmdbSession(key, token) }
                 if (res != null) {
                     settings.setTmdbSessionId(res.first)
@@ -219,7 +194,7 @@ class MainActivity : ComponentActivity() {
             val anilistTok = settings.anilistToken.value.trim().removePrefix("Bearer ").trim()
             val tmdbSess = settings.tmdbSessionId.value
             val tmdbAcc = settings.tmdbAccountId.value
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+            lifecycleScope.launch(Dispatchers.IO) {
                 kotlinx.coroutines.delay(2000L)
                 if (anilistTok.isNotBlank()) {
                     try {
@@ -270,7 +245,7 @@ class MainActivity : ComponentActivity() {
             if (!directToken.isNullOrBlank()) {
                 settings.setAnilistToken(directToken)
                 Toast.makeText(this@MainActivity, "AniList connected!", Toast.LENGTH_SHORT).show()
-                kotlinx.coroutines.MainScope().launch {
+                lifecycleScope.launch {
                     val count = withContext(Dispatchers.IO) { repository.syncAniListLibrary(directToken) }
                     Toast.makeText(this@MainActivity, "AniList synced ($count items)", Toast.LENGTH_SHORT).show()
                 }
@@ -279,7 +254,7 @@ class MainActivity : ComponentActivity() {
 
             if (!code.isNullOrBlank()) {
                 android.util.Log.d("AniListOAuth", "Received code=$code")
-                kotlinx.coroutines.MainScope().launch {
+                lifecycleScope.launch {
                     val token = withContext(Dispatchers.IO) {
                         repository.exchangeAniListCode(
                             code = code,
@@ -303,7 +278,7 @@ class MainActivity : ComponentActivity() {
             val token = if (pending.startsWith("__pending__:")) pending.removePrefix("__pending__:") else data.getQueryParameter("request_token").orEmpty()
             val key = settings.tmdbApiKey.value.ifBlank { MediaEnrichmentRepository.DEFAULT_TMDB_API_KEY }
             if (token.isNotBlank()) {
-                kotlinx.coroutines.MainScope().launch {
+                lifecycleScope.launch {
                     val res = withContext(Dispatchers.IO) { repository.createTmdbSession(key, token) }
                     if (res != null) {
                         settings.setTmdbSessionId(res.first)
@@ -380,70 +355,81 @@ private fun MainAppScaffold(
     }
 
     val navItems = listOf(
-        NavItem("Library",  Icons.Outlined.Home,    Icons.Filled.Home),
-        NavItem("Search",   Icons.Outlined.Search,  Icons.Filled.Search)
+        NavItem("Home",     Icons.Outlined.Home,          Icons.Filled.Home),
+        NavItem("Library",  Icons.Outlined.VideoLibrary,  Icons.Filled.VideoLibrary),
+        NavItem("Search",   Icons.Outlined.Search,        Icons.Filled.Search)
     )
 
     val haptic = LocalHapticFeedback.current
-    val tc = LocalAppThemeColors.current
+    val colors = LocalAppColors.current
 
     Scaffold(
-        containerColor = tc.background,
+        containerColor = colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (selectedIndex in 0..1) {
+            if (selectedIndex in 0..2) {
+                val glassRim = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.35f),
+                        Color.White.copy(alpha = 0.08f),
+                        Color.Transparent
+                    )
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 36.dp, vertical = 12.dp),
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(
+                    Surface(
+                        shape = RoundedCornerShape(32.dp),
+                        color = if (colors.isDark) Color(0xCC121524) else Color(0xEEFFFFFF),
+                        border = BorderStroke(1.dp, glassRim),
+                        shadowElevation = 16.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
-                            .drawBehind {
-                                drawRoundRect(
-                                    color = tc.shadowColor,
-                                    topLeft = Offset(4.dp.toPx(), 4.dp.toPx()),
-                                    size = size,
-                                    cornerRadius = CornerRadius(14.dp.toPx(), 14.dp.toPx())
-                                )
-                            }
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(tc.surface)
-                            .border(2.dp, tc.primary, RoundedCornerShape(14.dp))
+                            .height(60.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             navItems.forEachIndexed { index, item ->
                                 val selected = selectedIndex == index
-                                val pillBg by animateColorAsState(
-                                    targetValue = if (selected) tc.navAccent else Color.Transparent,
-                                    animationSpec = tween(150),
-                                    label = "pill_bg"
-                                )
-                                val iconTint by animateColorAsState(
-                                    targetValue = if (selected) tc.navAccentText else tc.textSecondary,
-                                    animationSpec = tween(150),
-                                    label = "tab_color"
+                                val iconScale by animateFloatAsState(
+                                    targetValue = if (selected) 1.12f else 1.0f,
+                                    animationSpec = tween(160),
+                                    label = "tab_scale"
                                 )
 
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(pillBg)
+                                        .clip(RoundedCornerShape(24.dp))
                                         .then(
-                                            if (selected) Modifier.border(1.5.dp, Color.Black, RoundedCornerShape(10.dp))
-                                            else Modifier
+                                            if (selected) {
+                                                Modifier
+                                                    .background(
+                                                        Brush.horizontalGradient(
+                                                            listOf(
+                                                                Color(0xFF00F2FE).copy(alpha = 0.20f),
+                                                                Color(0xFF0A84FF).copy(alpha = 0.24f)
+                                                            )
+                                                        )
+                                                    )
+                                                    .border(
+                                                        0.8.dp,
+                                                        Color(0xFF00F2FE).copy(alpha = 0.5f),
+                                                        RoundedCornerShape(24.dp)
+                                                    )
+                                            } else {
+                                                Modifier
+                                            }
                                         )
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
@@ -456,21 +442,25 @@ private fun MainAppScaffold(
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(7.dp)
                                     ) {
                                         Icon(
                                             imageVector = if (selected) item.selectedIcon else item.icon,
                                             contentDescription = item.label,
-                                            modifier = Modifier.size(20.dp),
-                                            tint = iconTint
+                                            modifier = Modifier
+                                                .size(21.dp)
+                                                .graphicsLayer {
+                                                    scaleX = iconScale
+                                                    scaleY = iconScale
+                                                },
+                                            tint = if (selected) Color(0xFF00F2FE) else if (colors.isDark) Color(0xFF8E8EA0) else Color(0xFF636375)
                                         )
                                         AnimatedVisibility(visible = selected) {
                                             Text(
-                                                text = item.label.uppercase(),
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Black,
-                                                color = tc.navAccentText,
-                                                letterSpacing = 0.5.sp
+                                                text = item.label,
+                                                fontSize = 12.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (colors.isDark) Color.White else Color(0xFF121524)
                                             )
                                         }
                                     }
@@ -486,10 +476,8 @@ private fun MainAppScaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = paddingValues.calculateBottomPadding())
-                .background(tc.background)
+                .background(colors.background)
         ) {
-            ThemeAmbientOverlay(modifier = Modifier.matchParentSize())
-
             AnimatedContent(
                 targetState = selectedIndex,
                 transitionSpec = {
@@ -505,14 +493,21 @@ private fun MainAppScaffold(
                 modifier = Modifier.fillMaxSize()
             ) { targetIndex ->
                 when (targetIndex) {
-                    0 -> HistoryScreen(
+                    0 -> HomeScreen(
+                        dao = dao,
+                        repository = repository,
+                        settings = settings,
+                        onNavigateToSearch = { navigateToTab(2) },
+                        onNavigateToSettings = { navigateToTab(4) }
+                    )
+                    1 -> HistoryScreen(
                         dao = dao,
                         repository = repository,
                         settings = settings,
                         onNavigateToDiscover = { navigateToTab(2) },
-                        onNavigateToSettings = { navigateToTab(3) }
+                        onNavigateToSettings = { navigateToTab(4) }
                     )
-                    1 -> HistoryScreen(
+                    2 -> HistoryScreen(
                         dao = dao,
                         repository = repository,
                         settings = settings,
@@ -525,16 +520,16 @@ private fun MainAppScaffold(
                             }
                         },
                         onNavigateToDiscover = { navigateToTab(2) },
-                        onNavigateToSettings = { navigateToTab(3) }
+                        onNavigateToSettings = { navigateToTab(4) }
                     )
-                    2 -> OnboardingScreen(onContinueToDashboard = {
+                    3 -> OnboardingScreen(onContinueToDashboard = {
                         if (tabBackStack.size > 1) {
                             tabBackStack.removeAt(tabBackStack.lastIndex)
                         } else {
                             navigateToTab(0)
                         }
                     })
-                    3 -> SettingsScreen(
+                    4 -> SettingsScreen(
                         settings = settings,
                         repository = repository,
                         onBack = {

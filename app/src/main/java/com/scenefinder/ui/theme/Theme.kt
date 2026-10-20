@@ -1,8 +1,10 @@
 package com.scenefinder.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -11,213 +13,163 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.scenefinder.data.prefs.AppTheme
+import com.scenefinder.data.prefs.ThemeMode
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AppThemeColors – the single source of truth for every dynamic color in the app
+// AppColors – Single source of truth for dynamic Dark/Light colors
 // ─────────────────────────────────────────────────────────────────────────────
 
-data class AppThemeColors(
+data class AppColors(
+    val isDark: Boolean,
     val primary: Color,
-    val secondary: Color,
-    val tertiary: Color,
-    val accent: Color,
     val background: Color,
     val surface: Color,
-    val surfaceElevated: Color,
-    val border: Color,
-    val borderMuted: Color,
+    val card: Color,
+    val cardElevated: Color,
+    val divider: Color,
     val textPrimary: Color,
     val textSecondary: Color,
-    val textInverse: Color,
-    val shadowColor: Color = Color.Black,
-    val isCyberpunk: Boolean = false,
-    val isIronMan: Boolean = false,
-    val isBrutalist: Boolean = false,
-    val isDarkMinimal: Boolean = false,
-    val navAccent: Color,
-    val navAccentText: Color
+    val textTertiary: Color,
+    val accent: Color
+)
+
+val DarkAppColors = AppColors(
+    isDark = true,
+    primary = IGBlue,
+    background = IGBlack,
+    surface = IGSurface,
+    card = IGCard,
+    cardElevated = IGCardElevated,
+    divider = IGDivider,
+    textPrimary = IGTextPrimary,
+    textSecondary = IGTextSecondary,
+    textTertiary = IGTextTertiary,
+    accent = IGGradMid
+)
+
+val LightAppColors = AppColors(
+    isDark = false,
+    primary = IGBlue,
+    background = IGLightBg,
+    surface = IGLightSurface,
+    card = IGLightCard,
+    cardElevated = IGLightCardElevated,
+    divider = IGLightDivider,
+    textPrimary = IGLightTextPrimary,
+    textSecondary = IGLightTextSecondary,
+    textTertiary = IGLightTextTertiary,
+    accent = IGGradMid
+)
+
+val LocalAppColors = staticCompositionLocalOf { DarkAppColors }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Material ColorSchemes
+// ─────────────────────────────────────────────────────────────────────────────
+
+private val DarkColorScheme = darkColorScheme(
+    primary = IGBlue,
+    onPrimary = Color.White,
+    primaryContainer = IGCard,
+    onPrimaryContainer = IGTextPrimary,
+    secondary = IGGradMid,
+    onSecondary = Color.White,
+    error = IGRed,
+    onError = Color.White,
+    background = IGBlack,
+    onBackground = IGTextPrimary,
+    surface = IGSurface,
+    onSurface = IGTextPrimary,
+    surfaceVariant = IGCard,
+    onSurfaceVariant = IGTextSecondary,
+    outline = IGDivider,
+    outlineVariant = IGTextTertiary
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = IGBlue,
+    onPrimary = Color.White,
+    primaryContainer = IGLightCard,
+    onPrimaryContainer = IGLightTextPrimary,
+    secondary = IGGradMid,
+    onSecondary = Color.White,
+    error = IGRed,
+    onError = Color.White,
+    background = IGLightBg,
+    onBackground = IGLightTextPrimary,
+    surface = IGLightSurface,
+    onSurface = IGLightTextPrimary,
+    surfaceVariant = IGLightCard,
+    onSurfaceVariant = IGLightTextSecondary,
+    outline = IGLightDivider,
+    outlineVariant = IGLightTextTertiary
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Theme factory
+// Typography
 // ─────────────────────────────────────────────────────────────────────────────
 
-fun getThemeColors(theme: AppTheme): AppThemeColors = when (theme) {
-
-    AppTheme.NEO_BRUTALISM -> AppThemeColors(
-        primary         = BrutalYellow,
-        secondary       = BrutalCyan,
-        tertiary        = BrutalLime,
-        accent          = BrutalPink,
-        background      = BrutalDarkBg,
-        surface         = BrutalCard,
-        surfaceElevated = BrutalCardElevated,
-        border          = BrutalBorder,
-        borderMuted     = BrutalBorderMuted,
-        textPrimary     = BrutalTextPrimary,
-        textSecondary   = BrutalTextSecondary,
-        textInverse     = BrutalTextInverse,
-        shadowColor     = BrutalBlack,
-        isBrutalist     = true,
-        navAccent       = BrutalYellow,
-        navAccentText   = BrutalTextInverse
-    )
-
-    AppTheme.CYBERPUNK_2077 -> AppThemeColors(
-        primary         = CyberpunkYellow,
-        secondary       = CyberpunkCyan,
-        tertiary        = CyberpunkGreen,
-        accent          = CyberpunkRed,
-        background      = CyberpunkDarkBg,
-        surface         = CyberpunkCard,
-        surfaceElevated = CyberpunkCardElevated,
-        border          = CyberpunkYellow,
-        borderMuted     = Color(0xFF2A2A18),
-        textPrimary     = Color(0xFFF0F0F0),
-        textSecondary   = Color(0xFF9FA8A3),
-        textInverse     = Color(0xFF08080C),
-        shadowColor     = CyberpunkRed.copy(alpha = 0.8f),
-        isCyberpunk     = true,
-        navAccent       = CyberpunkYellow,
-        navAccentText   = Color(0xFF08080C)
-    )
-
-    AppTheme.IRON_MAN -> AppThemeColors(
-        primary         = IronManGold,
-        secondary       = IronManBlueBright,
-        tertiary        = IronManGoldBright,
-        accent          = IronManRedBright,
-        background      = IronManDarkBg,
-        surface         = IronManCard,
-        surfaceElevated = IronManCardElevated,
-        border          = IronManBorder,
-        borderMuted     = IronManBorderMuted,
-        textPrimary     = Color(0xFFEEEEEE),
-        textSecondary   = Color(0xFF9098A0),
-        textInverse     = Color(0xFF060608),
-        shadowColor     = IronManRed.copy(alpha = 0.6f),
-        isIronMan       = true,
-        navAccent       = IronManGold,
-        navAccentText   = Color(0xFF060608)
-    )
-
-    AppTheme.DARK_MINIMAL -> AppThemeColors(
-        primary         = Color(0xFF6C63FF),
-        secondary       = Color(0xFF03DAC5),
-        tertiary        = Color(0xFF4CAF50),
-        accent          = Color(0xFFCF6679),
-        background      = Color(0xFF000000),
-        surface         = Color(0xFF121212),
-        surfaceElevated = Color(0xFF1E1E1E),
-        border          = Color(0xFF2C2C2C),
-        borderMuted     = Color(0xFF1A1A1A),
-        textPrimary     = Color(0xFFEEEEEE),
-        textSecondary   = Color(0xFF888888),
-        textInverse     = Color(0xFF000000),
-        isDarkMinimal   = true,
-        navAccent       = Color(0xFF6C63FF),
-        navAccentText   = Color(0xFFFFFFFF)
-    )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CompositionLocal
-// ─────────────────────────────────────────────────────────────────────────────
-
-val LocalAppThemeColors = staticCompositionLocalOf { getThemeColors(AppTheme.NEO_BRUTALISM) }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Material color scheme helper
-// ─────────────────────────────────────────────────────────────────────────────
-
-private fun buildMaterialColorScheme(tc: AppThemeColors) = darkColorScheme(
-    primary              = tc.primary,
-    onPrimary            = tc.textInverse,
-    primaryContainer     = tc.surface,
-    onPrimaryContainer   = tc.textPrimary,
-    secondary            = tc.secondary,
-    onSecondary          = tc.textPrimary,
-    error                = tc.accent,
-    onError              = tc.textPrimary,
-    background           = tc.background,
-    onBackground         = tc.textPrimary,
-    surface              = tc.surface,
-    onSurface            = tc.textPrimary,
-    surfaceVariant       = tc.surfaceElevated,
-    onSurfaceVariant     = tc.textSecondary,
-    outline              = tc.borderMuted,
-    outlineVariant       = tc.textSecondary
-)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Typography helper
-// ─────────────────────────────────────────────────────────────────────────────
-
-private fun buildTypography(tc: AppThemeColors): Typography {
-    val titleFamily = if (tc.isCyberpunk || tc.isIronMan) FontFamily.Monospace else FontFamily.Default
+private fun buildTypography(isDark: Boolean): Typography {
+    val textPrim = if (isDark) IGTextPrimary else IGLightTextPrimary
+    val textSec = if (isDark) IGTextSecondary else IGLightTextSecondary
     return Typography(
         displayLarge = TextStyle(
-            fontFamily   = titleFamily,
-            fontWeight   = FontWeight.Black,
-            fontSize     = 57.sp,
-            lineHeight   = 64.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.Black,
+            fontSize = 57.sp,
+            lineHeight = 64.sp,
+            color = textPrim
         ),
         headlineLarge = TextStyle(
-            fontFamily   = titleFamily,
-            fontWeight   = FontWeight.Bold,
-            fontSize     = 26.sp,
-            lineHeight   = 32.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.Bold,
+            fontSize = 26.sp,
+            lineHeight = 32.sp,
+            color = textPrim
         ),
         headlineMedium = TextStyle(
-            fontFamily   = titleFamily,
-            fontWeight   = FontWeight.Bold,
-            fontSize     = 22.sp,
-            lineHeight   = 28.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+            lineHeight = 28.sp,
+            color = textPrim
         ),
         titleLarge = TextStyle(
-            fontFamily   = titleFamily,
-            fontWeight   = FontWeight.SemiBold,
-            fontSize     = 18.sp,
-            lineHeight   = 24.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 18.sp,
+            lineHeight = 24.sp,
+            color = textPrim
         ),
         titleMedium = TextStyle(
-            fontWeight   = FontWeight.SemiBold,
-            fontSize     = 15.sp,
-            lineHeight   = 20.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp,
+            lineHeight = 20.sp,
+            color = textPrim
         ),
         bodyLarge = TextStyle(
-            fontWeight   = FontWeight.Normal,
-            fontSize     = 14.sp,
-            lineHeight   = 20.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.Normal,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            color = textPrim
         ),
         bodyMedium = TextStyle(
-            fontWeight   = FontWeight.Normal,
-            fontSize     = 13.sp,
-            lineHeight   = 18.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.Normal,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = textPrim
         ),
         bodySmall = TextStyle(
-            fontWeight   = FontWeight.Normal,
-            fontSize     = 12.sp,
-            lineHeight   = 16.sp,
-            color        = tc.textSecondary
+            fontWeight = FontWeight.Normal,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            color = textSec
         ),
         labelLarge = TextStyle(
-            fontWeight   = FontWeight.SemiBold,
-            fontSize     = 13.sp,
-            color        = tc.textPrimary
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
+            color = textPrim
         ),
         labelSmall = TextStyle(
-            fontWeight   = FontWeight.Medium,
-            fontSize     = 11.sp,
-            color        = tc.textSecondary
+            fontWeight = FontWeight.Medium,
+            fontSize = 11.sp,
+            color = textSec
         )
     )
 }
@@ -228,17 +180,24 @@ private fun buildTypography(tc: AppThemeColors): Typography {
 
 @Composable
 fun SceneFinderTheme(
-    theme: AppTheme = AppTheme.NEO_BRUTALISM,
+    themeMode: ThemeMode = ThemeMode.DARK,
     content: @Composable () -> Unit
 ) {
-    val themeColors = getThemeColors(theme)
-    CompositionLocalProvider(LocalAppThemeColors provides themeColors) {
+    val isSystemDark = isSystemInDarkTheme()
+    val isDark = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemDark
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+    }
+
+    val appColors = if (isDark) DarkAppColors else LightAppColors
+    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
+
+    CompositionLocalProvider(LocalAppColors provides appColors) {
         MaterialTheme(
-            colorScheme = buildMaterialColorScheme(themeColors),
-            typography  = buildTypography(themeColors),
-            content     = content
+            colorScheme = colorScheme,
+            typography = buildTypography(isDark),
+            content = content
         )
     }
 }
-
-

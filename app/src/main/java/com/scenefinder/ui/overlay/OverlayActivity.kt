@@ -49,7 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -292,6 +294,11 @@ class OverlayActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        pendingMedia = null
+    }
 }
 
 @Composable
@@ -315,8 +322,18 @@ fun OverlayMediaCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!media.posterUrl.isNullOrBlank()) {
+                    val context = LocalContext.current
+                    val posterRequest = remember(media.posterUrl) {
+                        ImageRequest.Builder(context)
+                            .data(media.posterUrl)
+                            .size(195, 270)
+                            .crossfade(140)
+                            .allowHardware(true)
+                            .allowRgb565(true)
+                            .build()
+                    }
                     AsyncImage(
-                        model = media.posterUrl,
+                        model = posterRequest,
                         contentDescription = media.cleanTitle,
                         modifier = Modifier
                             .size(width = 65.dp, height = 90.dp)
