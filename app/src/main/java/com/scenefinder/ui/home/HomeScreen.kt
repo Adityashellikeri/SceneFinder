@@ -687,23 +687,6 @@ private fun SectionHeader(
                 )
             }
         }
-
-        // Apple-style "Featured" badge
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.06f))
-                .border(0.6.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
-                .padding(horizontal = 9.dp, vertical = 3.dp)
-        ) {
-            Text(
-                text = "FEATURED",
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textSecondary,
-                letterSpacing = 0.5.sp
-            )
-        }
     }
 }
 
@@ -771,6 +754,9 @@ private fun CinematicHeroCard(
     val isReadType = media.mediaType.equals("Manga", true) ||
             media.mediaType.equals("Manhwa", true)
 
+    val currentStatus = libraryMatch?.userStatus?.uppercase()
+    val isCompleted = currentStatus == "COMPLETED"
+
     val rim = Brush.verticalGradient(
         listOf(
             Color.White.copy(alpha = 0.35f),
@@ -825,7 +811,7 @@ private fun CinematicHeroCard(
                     .background(scrim)
             )
 
-            // Top Badges: Media Type, Age Rating Badge & Rating Star
+            // Top Badges Row: Media Type, Age Rating, Library Status & Rating Star
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -861,6 +847,25 @@ private fun CinematicHeroCard(
                     // Age Rating Badge (18+, 16+, 13+, PG-13, etc.)
                     if (!media.ageRating.isNullOrBlank()) {
                         AgeRatingBadge(rating = media.ageRating, fontSize = 9.sp)
+                    }
+
+                    // Library Status Badge at top (No longer squishes the title!)
+                    if (libraryMatch != null) {
+                        val (sColor, sText) = when (currentStatus) {
+                            "CURRENT" -> CyanAccent to if (isReadType) "Reading" else "Watching"
+                            "COMPLETED" -> GreenAccent to "Done"
+                            "DROPPED" -> Color(0xFFFF453A) to "Dropped"
+                            else -> PurpleAccent to "Plan"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.75f))
+                                .border(0.7.dp, sColor.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Text(text = sText, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = sColor)
+                        }
                     }
                 }
 
@@ -902,50 +907,42 @@ private fun CinematicHeroCard(
                     .align(Alignment.BottomStart)
                     .padding(16.dp)
             ) {
-                // Title and Synced Library Status
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = media.cleanTitle,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        letterSpacing = (-0.2).sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    // Library Status Badge if in user's library
-                    if (libraryMatch != null) {
-                        Spacer(Modifier.width(6.dp))
-                        val status = libraryMatch.userStatus.uppercase()
-                        val (sColor, sText) = when (status) {
-                            "CURRENT" -> CyanAccent to if (isReadType) "Reading" else "Watching"
-                            "COMPLETED" -> GreenAccent to "Completed"
-                            "DROPPED" -> Color(0xFFFF453A) to "Dropped"
-                            else -> PurpleAccent to "Planning"
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(sColor.copy(alpha = 0.22f))
-                                .border(0.7.dp, sColor.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(text = sText, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = sColor)
-                        }
-                    }
-                }
+                // Full Title (Entire width available without being squished)
+                Text(
+                    text = media.cleanTitle,
+                    fontSize = 16.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    letterSpacing = (-0.2).sp,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Spacer(Modifier.height(3.dp))
+
+                // Logical metadata text
                 val metaText = when {
-                    libraryMatch?.episode != null -> "Progress: Ep ${libraryMatch.episode} • ${media.mediaType}"
-                    libraryMatch?.chapter != null -> "Progress: Ch ${libraryMatch.chapter} • ${media.mediaType}"
-                    media.year != null -> "${media.year} • ${media.mediaType}"
-                    else -> media.mediaType
+                    isCompleted -> {
+                        val count = if (isReadType) (libraryMatch?.chapter ?: media.chapter) else (libraryMatch?.episode ?: media.episode)
+                        if (count != null && count > 0) "Completed • All $count ${if (isReadType) "chapters" else "episodes"}"
+                        else "Completed • ${media.mediaType}"
+                    }
+                    currentStatus == "CURRENT" -> {
+                        val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                        val total = if (isReadType) media.chapter else media.episode
+                        if (ep != null && total != null && total > 0) "Watching: ${if (isReadType) "Ch" else "Ep"} $ep of $total"
+                        else if (ep != null) "Watching: ${if (isReadType) "Ch" else "Ep"} $ep"
+                        else "Watching • ${media.mediaType}"
+                    }
+                    currentStatus == "PLANNING" -> {
+                        val total = if (isReadType) media.chapter else media.episode
+                        if (total != null && total > 0) "Plan to ${if (isReadType) "Read" else "Watch"} • $total ${if (isReadType) "chapters" else "episodes"}"
+                        else "Plan to ${if (isReadType) "Read" else "Watch"} • ${media.mediaType}"
+                    }
+                    else -> {
+                        if (media.year != null) "${media.year} • ${media.mediaType}" else media.mediaType
+                    }
                 }
                 Text(
                     text = metaText,
@@ -953,9 +950,10 @@ private fun CinematicHeroCard(
                     color = Color(0xFFB0B0C4),
                     fontWeight = FontWeight.Medium
                 )
+
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = media.overview ?: "Matched by personalized recommendation algorithm",
+                    text = media.overview ?: "Personalized recommendation",
                     fontSize = 11.sp,
                     color = Color(0xFFC8C8DC),
                     maxLines = 2,
@@ -964,75 +962,54 @@ private fun CinematicHeroCard(
                 )
                 Spacer(Modifier.height(13.dp))
 
-                // Actions: Synced Watching / Watched / Add to Library
-                val currentStatus = libraryMatch?.userStatus?.uppercase()
-                val isCompleted = currentStatus == "COMPLETED"
-
-                if (!isSaved) {
-                    // Unsaved item: Prominent "+ Add to Library" button (replaces "Watch" / "Read")
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(42.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(CyanAccent, BlueAccent)
-                                )
-                            )
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = onAddToLibrary
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(7.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                tint = Color(0xFF07080E),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Add to Library",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF07080E)
-                            )
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val watchingLabel = if (currentStatus == "CURRENT") {
-                            val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
-                            if (ep != null) (if (isReadType) "Reading Ch. $ep" else "Watching Ep. $ep") else (if (isReadType) "Reading ▸" else "Watching ▸")
-                        } else {
-                            if (isReadType) "Reading" else "Watching"
-                        }
-
-                        // Watching / Reading button (triggers progress tracking dialog)
+                // Action Controls based on Media State
+                when {
+                    !isSaved -> {
+                        // State 1: Unsaved -> Single wide "+ Add to Library"
                         Box(
                             modifier = Modifier
-                                .weight(1.2f)
-                                .height(40.dp)
+                                .fillMaxWidth()
+                                .height(42.dp)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(
-                                    if (currentStatus == "CURRENT") Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
-                                    else Brush.horizontalGradient(listOf(Color(0x3300F2FE), Color(0x330095F6)))
+                                    Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
                                 )
-                                .border(
-                                    0.75.dp,
-                                    if (currentStatus == "CURRENT") Color.Transparent else CyanAccent.copy(alpha = 0.5f),
-                                    RoundedCornerShape(14.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onAddToLibrary
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = null,
+                                    tint = Color(0xFF07080E),
+                                    modifier = Modifier.size(17.dp)
                                 )
+                                Text(
+                                    text = "Add to Library",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF07080E)
+                                )
+                            }
+                        }
+                    }
+
+                    isCompleted -> {
+                        // State 2: Completed -> Clean emerald status pill (tapping allows adjusting)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(GreenAccent.copy(alpha = 0.20f))
+                                .border(0.8.dp, GreenAccent.copy(alpha = 0.60f), RoundedCornerShape(14.dp))
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
@@ -1042,90 +1019,185 @@ private fun CinematicHeroCard(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(5.dp)
-                            ) {
-                                Icon(
-                                    if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                    tint = if (currentStatus == "CURRENT") Color(0xFF07080E) else CyanAccent,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = watchingLabel,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (currentStatus == "CURRENT") Color(0xFF07080E) else CyanAccent,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        // Watched / Read button (Marks all watched/read & syncs with AniList and TMDB)
-                        Box(
-                            modifier = Modifier
-                                .weight(1.0f)
-                                .height(40.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(
-                                    if (isCompleted) Brush.horizontalGradient(listOf(GreenAccent, Color(0xFF248A3D)))
-                                    else Brush.horizontalGradient(listOf(Color(0x3310B981), Color(0x33059669)))
-                                )
-                                .border(
-                                    0.75.dp,
-                                    if (isCompleted) Color.Transparent else GreenAccent.copy(alpha = 0.5f),
-                                    RoundedCornerShape(14.dp)
-                                )
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onMarkWatchedOrRead
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
                                     Icons.Default.Check,
                                     contentDescription = null,
-                                    tint = if (isCompleted) Color.White else GreenAccent,
-                                    modifier = Modifier.size(15.dp)
+                                    tint = GreenAccent,
+                                    modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = if (isReadType) "Read ✓" else "Watched ✓",
-                                    fontSize = 11.5.sp,
+                                    text = if (isReadType) "Completed (All Chapters Read)" else "Completed (All Episodes Watched)",
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isCompleted) Color.White else GreenAccent
+                                    color = GreenAccent
                                 )
                             }
                         }
+                    }
 
-                        // Glass Bookmark Icon
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0x55000000))
-                                .border(
-                                    0.75.dp,
-                                    GreenAccent.copy(alpha = 0.7f),
-                                    RoundedCornerShape(14.dp)
-                                )
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onToggleLibrary
-                                ),
-                            contentAlignment = Alignment.Center
+                    currentStatus == "CURRENT" -> {
+                        // State 3: Actively Watching / Reading -> [ Ep. X ▸ ] + [ ✓ Mark Done ]
+                        val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                        val total = if (isReadType) media.chapter else media.episode
+                        val watchingLabel = when {
+                            ep != null && total != null && total > 0 -> if (isReadType) "Ch. $ep of $total ▸" else "Ep. $ep of $total ▸"
+                            ep != null -> if (isReadType) "Ch. $ep ▸" else "Ep. $ep ▸"
+                            else -> if (isReadType) "Reading ▸" else "Watching ▸"
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.BookmarkAdded,
-                                contentDescription = "Saved",
-                                tint = GreenAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .height(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
+                                    )
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onWatching
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(
+                                        if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color(0xFF07080E),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = watchingLabel,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF07080E),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(GreenAccent.copy(alpha = 0.20f))
+                                    .border(0.75.dp, GreenAccent.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onMarkWatchedOrRead
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = GreenAccent,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "Mark Done",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GreenAccent
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        // State 4: Planning -> [ ▶ Start Watching ] + [ ✓ Mark Done ]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .height(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
+                                    )
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onWatching
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(
+                                        if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color(0xFF07080E),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = if (isReadType) "Start Reading" else "Start Watching",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF07080E),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(GreenAccent.copy(alpha = 0.20f))
+                                    .border(0.75.dp, GreenAccent.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onMarkWatchedOrRead
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = GreenAccent,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "Mark Done",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GreenAccent
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1187,6 +1259,9 @@ private fun CompactGlassCard(
     val haptic = LocalHapticFeedback.current
     val isReadType = media.mediaType.equals("Manga", true) ||
             media.mediaType.equals("Manhwa", true)
+
+    val currentStatus = libraryMatch?.userStatus?.uppercase()
+    val isCompleted = currentStatus == "COMPLETED"
 
     val rim = Brush.verticalGradient(
         listOf(
@@ -1301,8 +1376,7 @@ private fun CompactGlassCard(
 
                 // Top-Right: Library Status Badge if saved
                 if (libraryMatch != null) {
-                    val status = libraryMatch.userStatus.uppercase()
-                    val (sColor, sText) = when (status) {
+                    val (sColor, sText) = when (currentStatus) {
                         "CURRENT" -> CyanAccent to if (isReadType) "Reading" else "Watching"
                         "COMPLETED" -> GreenAccent to "Done"
                         "DROPPED" -> Color(0xFFFF453A) to "Drop"
@@ -1351,7 +1425,7 @@ private fun CompactGlassCard(
 
             Spacer(Modifier.height(8.dp))
 
-            // Multi-line Title with Breathing Room (Prevents abrupt truncation)
+            // Multi-line Title
             Text(
                 text = media.cleanTitle,
                 fontSize = 12.5.sp,
@@ -1366,122 +1440,85 @@ private fun CompactGlassCard(
 
             Spacer(Modifier.height(3.dp))
 
+            // Subtitle: Displays total count or category, avoiding repeating button text!
             val sub = when {
-                libraryMatch?.episode != null -> "Ep. ${libraryMatch.episode}"
-                libraryMatch?.chapter != null -> "Ch. ${libraryMatch.chapter}"
-                media.episode != null -> "${media.episode} Episodes"
-                media.chapter != null -> "${media.chapter} Chapters"
-                media.year != null -> "${media.year}"
+                isCompleted -> {
+                    val count = if (isReadType) (libraryMatch?.chapter ?: media.chapter) else (libraryMatch?.episode ?: media.episode)
+                    if (count != null && count > 0) "All $count ${if (isReadType) "chapters" else "episodes"}" else "Completed"
+                }
+                currentStatus == "CURRENT" -> {
+                    val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                    val total = if (isReadType) media.chapter else media.episode
+                    if (ep != null && total != null && total > 0) "${if (isReadType) "Ch" else "Ep"} $ep of $total"
+                    else if (ep != null) "At ${if (isReadType) "Ch" else "Ep"} $ep"
+                    else "Watching"
+                }
+                media.episode != null && media.episode > 0 -> "${media.episode} Episodes"
+                media.chapter != null && media.chapter > 0 -> "${media.chapter} Chapters"
+                media.year != null -> "${media.year} • ${media.mediaType}"
                 else -> media.mediaType
             }
             Text(
                 text = sub,
                 fontSize = 10.5.sp,
-                color = if (isDark) Color(0xFF8E8EA0) else Color(0xFF636375)
+                color = if (isDark) Color(0xFF8E8EA0) else Color(0xFF636375),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(Modifier.height(8.dp))
 
-            // Synced iOS Glass Action Pill
-            val currentStatus = libraryMatch?.userStatus?.uppercase()
-            val isCompleted = currentStatus == "COMPLETED"
-
-            if (!isSaved) {
-                // Unsaved item: "+ Add to Library"
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(CyanAccent, BlueAccent)
-                            )
-                        )
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onAddToLibrary
-                        )
-                        .padding(vertical = 7.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = Color(0xFF07080E),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = "Add to Library",
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF07080E)
-                        )
-                    }
-                }
-            } else if (isCompleted) {
-                // Completed Pill
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(GreenAccent.copy(alpha = 0.20f))
-                        .border(
-                            0.75.dp,
-                            GreenAccent.copy(alpha = 0.55f),
-                            RoundedCornerShape(10.dp)
-                        )
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onWatchingClick
-                        )
-                        .padding(vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint = GreenAccent,
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Text(
-                            text = if (isReadType) "Read ✓" else "Watched ✓",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = GreenAccent
-                        )
-                    }
-                }
-            } else {
-                // In Library: Watching button + Mark Done button
-                val watchingText = if (currentStatus == "CURRENT") {
-                    val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
-                    if (ep != null) (if (isReadType) "Ch. $ep" else "Ep. $ep") else (if (isReadType) "Read" else "Watch")
-                } else {
-                    if (isReadType) "Read" else "Watch"
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Watching Pill (Opens progress dialog)
+            // Action Pill
+            when {
+                !isSaved -> {
+                    // Unsaved: "+ Add to Library"
                     Box(
                         modifier = Modifier
-                            .weight(1.2f)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(CyanAccent.copy(alpha = 0.18f))
-                            .border(0.7.dp, CyanAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onAddToLibrary
+                            )
+                            .padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = Color(0xFF07080E),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Add to Library",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF07080E)
+                            )
+                        }
+                    }
+                }
+
+                isCompleted -> {
+                    // Completed: Clean emerald status pill (NO confusing multiple buttons)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(GreenAccent.copy(alpha = 0.20f))
+                            .border(
+                                0.75.dp,
+                                GreenAccent.copy(alpha = 0.55f),
+                                RoundedCornerShape(10.dp)
+                            )
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -1492,55 +1529,175 @@ private fun CompactGlassCard(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Icon(
-                                if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = CyanAccent,
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Text(
-                                text = watchingText,
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = CyanAccent,
-                                maxLines = 1
-                            )
-                        }
-                    }
-
-                    // Done / Watched Pill (Marks all done and syncs)
-                    Box(
-                        modifier = Modifier
-                            .weight(0.9f)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(GreenAccent.copy(alpha = 0.18f))
-                            .border(0.7.dp, GreenAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = onMarkWatchedOrRead
-                            )
-                            .padding(vertical = 6.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Icon(
                                 Icons.Default.Check,
                                 contentDescription = null,
                                 tint = GreenAccent,
-                                modifier = Modifier.size(10.dp)
+                                modifier = Modifier.size(11.dp)
                             )
                             Text(
-                                text = "Done",
-                                fontSize = 9.5.sp,
+                                text = "Completed",
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = GreenAccent
                             )
+                        }
+                    }
+                }
+
+                currentStatus == "CURRENT" -> {
+                    // In Progress: [ Ep. X ▸ ] + [ Done ]
+                    val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                    val epLabel = if (ep != null) (if (isReadType) "Ch. $ep ▸" else "Ep. $ep ▸") else (if (isReadType) "Reading ▸" else "Watching ▸")
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(CyanAccent.copy(alpha = 0.18f))
+                                .border(0.7.dp, CyanAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onWatchingClick
+                                )
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = CyanAccent,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    text = epLabel,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CyanAccent,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(0.9f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(GreenAccent.copy(alpha = 0.18f))
+                                .border(0.7.dp, GreenAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onMarkWatchedOrRead
+                                )
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = GreenAccent,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    text = "Done",
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GreenAccent
+                                )
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    // Planning: [ ▶ Start ] + [ Done ]
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(CyanAccent.copy(alpha = 0.18f))
+                                .border(0.7.dp, CyanAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onWatchingClick
+                                )
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = CyanAccent,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    text = if (isReadType) "Start" else "Start",
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CyanAccent,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(0.9f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(GreenAccent.copy(alpha = 0.18f))
+                                .border(0.7.dp, GreenAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onMarkWatchedOrRead
+                                )
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = GreenAccent,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    text = "Done",
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GreenAccent
+                                )
+                            }
                         }
                     }
                 }
