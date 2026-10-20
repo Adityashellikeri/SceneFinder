@@ -1562,10 +1562,10 @@ private fun CompactGlassCard(
 
             Spacer(Modifier.height(8.dp))
 
-            // Action Pill
+            // Action Pill: single button — Add to Library or status pill, both open popup
             when {
                 !isSaved -> {
-                    // Unsaved: "+ Add to Library"
+                    // Unsaved: "+ Add to Library" -> opens popup
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1601,197 +1601,58 @@ private fun CompactGlassCard(
                     }
                 }
 
-                isCompleted -> {
-                    // Completed: Clean emerald status pill (NO confusing multiple buttons)
+                else -> {
+                    // Saved: single color-coded status pill -> tapping opens popup
+                    val (pillColor, pillIcon, pillLabel) = when (currentStatus) {
+                        "CURRENT" -> {
+                            val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                            val label = if (ep != null) {
+                                if (isReadType) "Ch. $ep" else "Ep. $ep"
+                            } else {
+                                if (isReadType) "Reading" else "Watching"
+                            }
+                            Triple(CyanAccent, if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow, label)
+                        }
+                        "COMPLETED" ->
+                            Triple(GreenAccent, Icons.Default.Check, "Completed")
+                        "DROPPED" ->
+                            Triple(Color(0xFFFF453A), Icons.Default.Check, "Dropped")
+                        else -> // PLANNING or anything else
+                            Triple(PurpleAccent, Icons.Default.BookmarkAdded, if (isReadType) "Plan to Read" else "Plan to Watch")
+                    }
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(GreenAccent.copy(alpha = 0.20f))
-                            .border(
-                                0.75.dp,
-                                GreenAccent.copy(alpha = 0.55f),
-                                RoundedCornerShape(10.dp)
-                            )
+                            .background(pillColor.copy(alpha = 0.16f))
+                            .border(0.75.dp, pillColor.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
-                                onClick = onWatchingClick
+                                onClick = onWatchingClick   // opens popup
                             )
                             .padding(vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                Icons.Default.Check,
+                                pillIcon,
                                 contentDescription = null,
-                                tint = GreenAccent,
+                                tint = pillColor,
                                 modifier = Modifier.size(11.dp)
                             )
                             Text(
-                                text = "Completed",
+                                text = pillLabel,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = GreenAccent
+                                color = pillColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                        }
-                    }
-                }
-
-                currentStatus == "CURRENT" -> {
-                    // In Progress: [ Ep. X ▸ ] + [ Done ]
-                    val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
-                    val epLabel = if (ep != null) (if (isReadType) "Ch. $ep ▸" else "Ep. $ep ▸") else (if (isReadType) "Reading ▸" else "Watching ▸")
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1.2f)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(CyanAccent.copy(alpha = 0.18f))
-                                .border(0.7.dp, CyanAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onWatchingClick
-                                )
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Icon(
-                                    if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                    tint = CyanAccent,
-                                    modifier = Modifier.size(10.dp)
-                                )
-                                Text(
-                                    text = epLabel,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = CyanAccent,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .weight(0.9f)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(GreenAccent.copy(alpha = 0.18f))
-                                .border(0.7.dp, GreenAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onMarkWatchedOrRead
-                                )
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = GreenAccent,
-                                    modifier = Modifier.size(10.dp)
-                                )
-                                Text(
-                                    text = "Done",
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GreenAccent
-                                )
-                            }
-                        }
-                    }
-                }
-
-                else -> {
-                    // Planning: [ ▶ Start ] + [ Done ]
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1.2f)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(CyanAccent.copy(alpha = 0.18f))
-                                .border(0.7.dp, CyanAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onWatchingClick
-                                )
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Icon(
-                                    if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                    tint = CyanAccent,
-                                    modifier = Modifier.size(10.dp)
-                                )
-                                Text(
-                                    text = if (isReadType) "Start" else "Start",
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = CyanAccent,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .weight(0.9f)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(GreenAccent.copy(alpha = 0.18f))
-                                .border(0.7.dp, GreenAccent.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onMarkWatchedOrRead
-                                )
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = GreenAccent,
-                                    modifier = Modifier.size(10.dp)
-                                )
-                                Text(
-                                    text = "Done",
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GreenAccent
-                                )
-                            }
                         }
                     }
                 }
