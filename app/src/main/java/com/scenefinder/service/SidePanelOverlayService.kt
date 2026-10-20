@@ -52,22 +52,24 @@ class SidePanelOverlayService : Service() {
         const val ACTION_STOP = "com.scenefinder.SIDE_PANEL_STOP"
 
         fun start(context: Context) {
-            if (!Settings.canDrawOverlays(context)) return
-            val intent = Intent(context, SidePanelOverlayService::class.java).apply {
-                action = ACTION_START
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            try {
+                if (!Settings.canDrawOverlays(context)) return
+                val intent = Intent(context, SidePanelOverlayService::class.java).apply {
+                    action = ACTION_START
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Throwable) {}
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, SidePanelOverlayService::class.java).apply {
-                action = ACTION_STOP
-            }
-            context.startService(intent)
+            try {
+                val intent = Intent(context, SidePanelOverlayService::class.java)
+                context.stopService(intent)
+            } catch (_: Throwable) {}
         }
     }
 

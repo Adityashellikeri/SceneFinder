@@ -81,6 +81,8 @@ import com.scenefinder.ui.components.AgeRatingBadge
 import com.scenefinder.ui.components.ProgressTrackingDialog
 import com.scenefinder.ui.theme.LocalAppColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -137,20 +139,59 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            val recs = repository.getHomeRecommendations(userLibrary)
-            val anime = repository.getTopAnime()
-            val manga = repository.getTopManga()
-            val manhwa = repository.getTopManhwa()
-            val movies = repository.getTopMovies(apiKey)
-            val tv = repository.getTopTvSeries(apiKey)
-            withContext(Dispatchers.Main) {
-                recommendations = recs
-                topAnime = anime
-                topManga = manga
-                topManhwa = manhwa
-                topMovies = movies
-                topTv = tv
-                isLoading = false
+            try {
+                coroutineScope {
+                    val recsDeferred = async { runCatching { repository.getHomeRecommendations(userLibrary) }.getOrDefault(emptyList()) }
+                    val animeDeferred = async { runCatching { repository.getTopAnime() }.getOrDefault(emptyList()) }
+                    val mangaDeferred = async { runCatching { repository.getTopManga() }.getOrDefault(emptyList()) }
+                    val manhwaDeferred = async { runCatching { repository.getTopManhwa() }.getOrDefault(emptyList()) }
+                    val moviesDeferred = async { runCatching { repository.getTopMovies(apiKey) }.getOrDefault(emptyList()) }
+                    val tvDeferred = async { runCatching { repository.getTopTvSeries(apiKey) }.getOrDefault(emptyList()) }
+
+                    var recs = recsDeferred.await()
+                    var anime = animeDeferred.await()
+                    var manga = mangaDeferred.await()
+                    var manhwa = manhwaDeferred.await()
+                    var movies = moviesDeferred.await()
+                    var tv = tvDeferred.await()
+
+                    // Seamless instant fallback from local library if network returns empty
+                    if (recs.isEmpty() && userLibrary.isNotEmpty()) {
+                        recs = userLibrary.shuffled().take(10)
+                    }
+                    if (movies.isEmpty()) {
+                        movies = userLibrary.filter { it.mediaType.equals("Movie", ignoreCase = true) }
+                    }
+                    if (tv.isEmpty()) {
+                        tv = userLibrary.filter { it.mediaType.equals("TV Shows", ignoreCase = true) || it.mediaType.equals("Web Series", ignoreCase = true) }
+                    }
+                    if (anime.isEmpty()) {
+                        anime = userLibrary.filter { it.mediaType.equals("Anime", ignoreCase = true) }
+                    }
+                    if (manga.isEmpty()) {
+                        manga = userLibrary.filter { it.mediaType.equals("Manga", ignoreCase = true) }
+                    }
+                    if (manhwa.isEmpty()) {
+                        manhwa = userLibrary.filter { it.mediaType.equals("Manhwa", ignoreCase = true) }
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        recommendations = recs
+                        topAnime = anime
+                        topManga = manga
+                        topManhwa = manhwa
+                        topMovies = movies
+                        topTv = tv
+                        isLoading = false
+                    }
+                }
+            } catch (_: Throwable) {
+                withContext(Dispatchers.Main) {
+                    if (recommendations.isEmpty() && userLibrary.isNotEmpty()) {
+                        recommendations = userLibrary.shuffled().take(10)
+                    }
+                    isLoading = false
+                }
             }
         }
     }
