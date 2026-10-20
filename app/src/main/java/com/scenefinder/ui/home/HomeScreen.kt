@@ -5,13 +5,17 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -169,17 +173,6 @@ fun HomeScreen(
     var selectedDiscoverCategory by remember { mutableStateOf("Anime") }
     var discoverItems by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
     var isDiscoverLoading by remember { mutableStateOf(false) }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "spin")
-    val spinAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "spin_angle"
-    )
 
     val fetchDiscover: (String) -> Unit = { category ->
         isDiscoverLoading = true
@@ -450,14 +443,9 @@ fun HomeScreen(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(5.dp)
-                                            .clip(CircleShape)
-                                            .background(CyanAccent)
-                                    )
+                                    PulsingLiveDot(color = CyanAccent)
                                     Text(
                                         text = "AI FEED",
                                         fontSize = 9.5.sp,
@@ -503,28 +491,7 @@ fun HomeScreen(
 
             if (isLoading) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 90.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                color = CyanAccent,
-                                strokeWidth = 2.5.dp,
-                                modifier = Modifier.size(34.dp)
-                            )
-                            Text(
-                                text = "Curating your personalized feed\u2026",
-                                fontSize = 13.sp,
-                                color = colors.textSecondary
-                            )
-                        }
-                    }
+                    ShimmerLoadingFeed(isDark = colors.isDark)
                 }
             } else {
                 // Section 1: Hero Carousel (Recommendations)
@@ -553,13 +520,10 @@ fun HomeScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = "Refresh Recommendations",
+                                        RotatingRefreshIcon(
+                                            isRefreshing = isRefreshingRecs,
                                             tint = CyanAccent,
-                                            modifier = Modifier
-                                                .size(14.dp)
-                                                .graphicsLayer(rotationZ = if (isRefreshingRecs) spinAngle else 0f)
+                                            modifier = Modifier.size(14.dp)
                                         )
                                         Text(
                                             text = if (isRefreshingRecs) "Refreshing" else "Refresh",
@@ -577,7 +541,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)
                         ) {
-                            items(recommendations, key = { it.id }) { item ->
+                            items(recommendations, key = { it.id }, contentType = { "HeroCard" }) { item ->
                                 val libraryEntry = findMatchingLibraryEntry(item)
                                 val effectiveItem = libraryEntry ?: item
                                 val isSaved = libraryEntry != null
@@ -653,7 +617,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)
                     ) {
-                        items(listOf("Anime", "Manga", "Manhwa", "Movie", "TV Series")) { cat ->
+                        items(listOf("Anime", "Manga", "Manhwa", "Movie", "TV Series"), contentType = { "CategoryChip" }) { cat ->
                             val isSelected = cat.equals(selectedDiscoverCategory, ignoreCase = true)
                             val chipAccent = when (cat) {
                                 "Anime" -> PurpleAccent
@@ -703,18 +667,7 @@ fun HomeScreen(
                 // Discover Items Carousel
                 item {
                     if (isDiscoverLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = Color(0xFFFF5E7E),
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
+                        CompactRowShimmer(isDark = colors.isDark)
                     } else if (discoverItems.isNotEmpty()) {
                         CompactCardRow(
                             items = discoverItems,
@@ -918,8 +871,196 @@ fun HomeScreen(
 }
 
 // -------------------------------------------------------------
-// UI COMPONENTS (Apple Liquid Glass System)
+// UI COMPONENTS (Apple Liquid Glass System & Micro-Animations)
 // -------------------------------------------------------------
+
+@Composable
+private fun RotatingRefreshIcon(
+    isRefreshing: Boolean,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    if (isRefreshing) {
+        val transition = rememberInfiniteTransition(label = "spin_isolated")
+        val angle by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(850, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "spin_angle"
+        )
+        Icon(
+            imageVector = Icons.Default.Refresh,
+            contentDescription = "Refreshing",
+            tint = tint,
+            modifier = modifier.graphicsLayer { rotationZ = angle }
+        )
+    } else {
+        Icon(
+            imageVector = Icons.Default.Refresh,
+            contentDescription = "Refresh",
+            tint = tint,
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
+private fun rememberShimmerBrush(isDark: Boolean): Brush {
+    val transition = rememberInfiniteTransition(label = "shimmer_transition")
+    val translateAnim by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1800f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer_anim"
+    )
+    val shimmerColors = if (isDark) {
+        listOf(
+            Color(0xFF141628).copy(alpha = 0.50f),
+            Color(0xFF262A48).copy(alpha = 0.85f),
+            Color(0xFF141628).copy(alpha = 0.50f)
+        )
+    } else {
+        listOf(
+            Color(0xFFE2E4EC).copy(alpha = 0.50f),
+            Color(0xFFF7F8FC).copy(alpha = 0.90f),
+            Color(0xFFE2E4EC).copy(alpha = 0.50f)
+        )
+    }
+    return Brush.linearGradient(
+        colors = shimmerColors,
+        start = Offset(translateAnim - 700f, translateAnim - 700f),
+        end = Offset(translateAnim, translateAnim)
+    )
+}
+
+@Composable
+private fun ShimmerLoadingFeed(isDark: Boolean) {
+    val shimmerBrush = rememberShimmerBrush(isDark)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp)
+    ) {
+        // Hero Section Skeleton
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Box(
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(shimmerBrush)
+            )
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .width(260.dp)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(shimmerBrush)
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                repeat(2) {
+                    Box(
+                        modifier = Modifier
+                            .width(280.dp)
+                            .height(340.dp)
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
+
+        // Section Row Skeleton
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Box(
+                modifier = Modifier
+                    .width(150.dp)
+                    .height(18.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(shimmerBrush)
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(3) {
+                    Box(
+                        modifier = Modifier
+                            .width(146.dp)
+                            .height(260.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactRowShimmer(isDark: Boolean) {
+    val shimmerBrush = rememberShimmerBrush(isDark)
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)
+    ) {
+        items(5) {
+            Box(
+                modifier = Modifier
+                    .width(146.dp)
+                    .height(240.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(shimmerBrush)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PulsingLiveDot(
+    color: Color = CyanAccent,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse_dot_transition")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_scale"
+    )
+
+    Box(
+        modifier = modifier
+            .size(6.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                this.alpha = alpha
+            }
+            .clip(CircleShape)
+            .background(color)
+    )
+}
+
 
 @Composable
 private fun SectionHeader(
@@ -1068,6 +1209,17 @@ private fun CinematicHeroCard(
         )
     )
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.965f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "hero_scale"
+    )
+
     Surface(
         shape = RoundedCornerShape(26.dp),
         color = if (isDark) GlassDark else GlassLight,
@@ -1076,8 +1228,9 @@ private fun CinematicHeroCard(
         modifier = Modifier
             .width(280.dp)
             .height(340.dp)
+            .scale(scale)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onCardClick
             )
@@ -1376,7 +1529,11 @@ private fun CompactCardRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)
     ) {
-        itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
+        itemsIndexed(
+            items,
+            key = { _, it -> it.id },
+            contentType = { _, _ -> "CompactGlassCard" }
+        ) { index, item ->
             val libraryMatch = libraryLookup(item)
             val effectiveItem = libraryMatch ?: item
             val isSaved = libraryMatch != null
@@ -1427,6 +1584,17 @@ private fun CompactGlassCard(
         )
     )
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.955f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "compact_scale"
+    )
+
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = if (isDark) GlassDark else GlassLight,
@@ -1434,8 +1602,9 @@ private fun CompactGlassCard(
         shadowElevation = 8.dp,
         modifier = Modifier
             .width(146.dp)
+            .scale(scale)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onCardClick
             )

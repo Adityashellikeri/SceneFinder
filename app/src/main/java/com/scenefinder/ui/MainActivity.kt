@@ -136,11 +136,13 @@ class MainActivity : ComponentActivity() {
         handleArmIntent(intent)
         handleOAuthCallback(intent)
 
-        if (PermissionHelper.canDrawOverlays(this) && settings.sidePanelEnabled.value) {
-            SidePanelOverlayService.start(this)
-        } else {
-            SidePanelOverlayService.stop(this)
-        }
+        try {
+            if (PermissionHelper.canDrawOverlays(this) && settings.sidePanelEnabled.value) {
+                SidePanelOverlayService.start(this)
+            } else {
+                SidePanelOverlayService.stop(this)
+            }
+        } catch (_: Throwable) {}
 
         setContent {
             val themeMode by settings.themeMode.collectAsState()
@@ -164,11 +166,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         applyNativeMaxRefreshRate()
-        if (PermissionHelper.canDrawOverlays(this) && settings.sidePanelEnabled.value) {
-            SidePanelOverlayService.start(this)
-        } else {
-            SidePanelOverlayService.stop(this)
-        }
+        try {
+            if (PermissionHelper.canDrawOverlays(this) && settings.sidePanelEnabled.value) {
+                SidePanelOverlayService.start(this)
+            } else {
+                SidePanelOverlayService.stop(this)
+            }
+        } catch (_: Throwable) {}
 
         // Check if TMDB approval was pending
         val pendingTmdb = settings.tmdbSessionId.value
