@@ -482,12 +482,25 @@ private fun MainAppScaffold(
                 .padding(bottom = paddingValues.calculateBottomPadding())
                 .background(colors.background)
         ) {
-            Crossfade(
-            targetState = selectedIndex,
-            animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
-            label = "screen_crossfade",
-            modifier = Modifier.fillMaxSize()
-        ) { targetIndex ->
+            AnimatedContent(
+                targetState = selectedIndex,
+                transitionSpec = {
+                    val isForward = targetState > initialState
+                    val enterTransition = slideInHorizontally(
+                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                    ) { width -> (if (isForward) (width * 0.12f) else (-width * 0.12f)).toInt() } +
+                    fadeIn(animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing))
+
+                    val exitTransition = slideOutHorizontally(
+                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+                    ) { width -> (if (isForward) (-width * 0.12f) else (width * 0.12f)).toInt() } +
+                    fadeOut(animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing))
+
+                    enterTransition.togetherWith(exitTransition)
+                },
+                label = "smooth_screen_transition",
+                modifier = Modifier.fillMaxSize()
+            ) { targetIndex ->
                 when (targetIndex) {
                     0 -> HomeScreen(
                         dao = dao,

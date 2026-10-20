@@ -435,9 +435,10 @@ fun HistoryScreen(
         if (startInSearch) isSearchBarActive = true
     }
 
-    // Auto-refresh and backfill age ratings directly from APIs for any existing library items
+    // Auto-refresh ratings and purge duplicate entries in SQLite database
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
+            repository.cleanupDuplicateHistory()
             val effectiveKey = apiKey.ifBlank { MediaEnrichmentRepository.DEFAULT_TMDB_API_KEY }
             repository.refreshAllAgeRatings(effectiveKey)
         }
@@ -519,8 +520,27 @@ fun HistoryScreen(
         }
     }
 
-    val filteredLibrary = remember(historyList, selectedStatusFilter, selectedMediaTypeFilter) {
-        var list = historyList
+    val deduplicatedLibrary = remember(historyList) {
+        historyList
+            .groupBy { it.cleanTitle.trim().lowercase() }
+            .values
+            .map { group ->
+                group.maxWithOrNull(
+                    compareBy<EnrichedMediaEntity> {
+                        when (it.userStatus.uppercase()) {
+                            "COMPLETED" -> 4
+                            "CURRENT" -> 3
+                            "PAUSED", "REPEATING" -> 2
+                            "PLANNING" -> 1
+                            else -> 0
+                        }
+                    }.thenBy { it.cachedAt }
+                ) ?: group.first()
+            }
+    }
+
+    val filteredLibrary = remember(deduplicatedLibrary, selectedStatusFilter, selectedMediaTypeFilter) {
+        var list = deduplicatedLibrary
         if (selectedStatusFilter != "ALL") {
             list = list.filter { it.userStatus == selectedStatusFilter }
         }

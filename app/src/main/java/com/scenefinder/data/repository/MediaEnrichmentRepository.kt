@@ -1153,7 +1153,7 @@ class MediaEnrichmentRepository @Inject constructor(
                 }
             """.trimIndent()
 
-            val entitiesToInsert = mutableListOf<EnrichedMediaEntity>()
+            val entitiesMap = mutableMapOf<String, EnrichedMediaEntity>()
             for (mediaType in listOf("ANIME", "MANGA")) {
                 val resp = aniListApi.queryUserLibrary(
                     "Bearer $cleanToken",
@@ -1171,20 +1171,43 @@ class MediaEnrichmentRepository @Inject constructor(
                             media.format == "MOVIE" -> "Movie"
                             else -> "Anime"
                         }
-                        val entityId = "anilist_${media.type ?: "media"}_${media.id}"
-                        val existing = dao.getById(entityId)
+                        val canonicalId = "anilist_${detectedType.lowercase()}_${media.id}"
+                        val legacyUpperId = "anilist_${media.type ?: "media"}_${media.id}"
+                        val legacyAnimeId = "anilist_anime_${media.id}"
+                        val legacyMangaId = "anilist_manga_${media.id}"
+
+                        val existing = dao.getById(canonicalId)
+                            ?: dao.getById(legacyUpperId)
+                            ?: dao.getById(legacyAnimeId)
+                            ?: dao.getById(legacyMangaId)
+                            ?: dao.getBySearchKey(displayTitle.trim().lowercase())
+
+                        // Purge legacy uppercase or non-canonical duplicate ID from SQLite
+                        if (existing != null && existing.id != canonicalId) {
+                            dao.deleteById(existing.id)
+                        }
+
                         val entryTimestamp = if ((entry.updatedAt ?: 0L) > 0L) (entry.updatedAt!! * 1000L) else System.currentTimeMillis()
                         val finalCachedAt = existing?.cachedAt ?: entryTimestamp
 
-                        // If user modified status locally in the last 3 minutes, do not let stale cloud cache overwrite it
-                        val finalStatus = if (existing != null && (System.currentTimeMillis() - existing.cachedAt < 180_000L)) {
-                            existing.userStatus
-                        } else {
-                            entry.status ?: groupStatus
+                        val rawCloudStatus = (entry.status ?: groupStatus).uppercase()
+                        fun statusRank(s: String): Int = when (s.uppercase()) {
+                            "COMPLETED" -> 4
+                            "CURRENT" -> 3
+                            "PAUSED", "REPEATING" -> 2
+                            "PLANNING" -> 1
+                            else -> 0
+                        }
+
+                        // Never downgrade locally COMPLETED items to PLANNING from a stale cloud list
+                        val finalStatus = when {
+                            existing?.userStatus?.uppercase() == "COMPLETED" && rawCloudStatus == "PLANNING" -> "COMPLETED"
+                            existing != null && (System.currentTimeMillis() - existing.cachedAt < 300_000L) && statusRank(existing.userStatus) > statusRank(rawCloudStatus) -> existing.userStatus
+                            else -> rawCloudStatus
                         }
 
                         val entity = EnrichedMediaEntity(
-                            id = entityId,
+                            id = canonicalId,
                             searchKey = displayTitle.trim().lowercase(),
                             cleanTitle = displayTitle,
                             englishTitle = media.title?.english,
@@ -1204,19 +1227,57 @@ class MediaEnrichmentRepository @Inject constructor(
                             ageRating = resolveAniListAgeRating(isAdult = media.isAdult, genres = media.genres, tags = media.tags, mediaType = detectedType),
                             cachedAt = finalCachedAt
                         )
-                        entitiesToInsert.add(entity)
+
+                        // If already present in entitiesMap (e.g. from another custom list), preserve the highest status
+                        val existingInMap = entitiesMap[canonicalId]
+                        if (existingInMap == null || statusRank(entity.userStatus) >= statusRank(existingInMap.userStatus)) {
+                            entitiesMap[canonicalId] = entity
+                        }
                     }
                 }
             }
-            if (entitiesToInsert.isNotEmpty()) {
-                dao.insertAll(entitiesToInsert)
+            if (entitiesMap.isNotEmpty()) {
+                dao.insertAll(entitiesMap.values.toList())
             }
-            entitiesToInsert.size
+            entitiesMap.size
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             android.util.Log.e("AniListSync", "Failed to sync AniList library", e)
             0
         }
+    }
+
+    /**
+     * Purges duplicate library items by title, preserving the record with highest status & newest timestamp
+     */
+    suspend fun cleanupDuplicateHistory() = withContext(Dispatchers.IO) {
+        try {
+            val all = dao.getAllList()
+            val idsToDelete = mutableListOf<String>()
+            all.groupBy { it.cleanTitle.trim().lowercase() }.forEach { (_, group) ->
+                if (group.size > 1) {
+                    fun statusScore(s: String): Int = when (s.uppercase()) {
+                        "COMPLETED" -> 4
+                        "CURRENT" -> 3
+                        "PAUSED", "REPEATING" -> 2
+                        "PLANNING" -> 1
+                        else -> 0
+                    }
+                    val best = group.maxWithOrNull(
+                        compareBy<EnrichedMediaEntity> { statusScore(it.userStatus) }
+                            .thenBy { it.cachedAt }
+                    ) ?: group.first()
+                    for (item in group) {
+                        if (item.id != best.id) {
+                            idsToDelete.add(item.id)
+                        }
+                    }
+                }
+            }
+            if (idsToDelete.isNotEmpty()) {
+                dao.deleteByIds(idsToDelete)
+            }
+        } catch (_: Exception) {}
     }
 
     /**
@@ -1993,7 +2054,15 @@ class MediaEnrichmentRepository @Inject constructor(
 
         // 1. AniList sync for Anime/Manga/Manhwa
         if ((isAnime || isManga || media.sourceService == "AniList") && cleanAniToken.isNotBlank()) {
-            val numericId = media.id.substringAfterLast("_").toIntOrNull()
+            var numericId = if (media.sourceService == "AniList") media.id.substringAfterLast("_").toIntOrNull() else null
+            if (numericId == null) {
+                val targetType = if (isAnime) MediaType.ANIME else MediaType.MANGA
+                val aniMatch = searchAniList(
+                    MediaMatchCandidate(rawText = media.cleanTitle, cleanTitle = media.cleanTitle, mediaType = targetType),
+                    if (isAnime) "ANIME" else "MANGA"
+                )
+                numericId = aniMatch?.id?.substringAfterLast("_")?.toIntOrNull()
+            }
             if (numericId != null) {
                 try {
                     val progressCount = if (isManga) finalChapter else finalEpisode

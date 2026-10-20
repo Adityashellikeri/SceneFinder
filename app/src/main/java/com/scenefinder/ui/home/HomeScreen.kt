@@ -164,10 +164,27 @@ fun HomeScreen(
 
     val userLibrary by dao.getAllHistory().collectAsState(initial = emptyList())
 
+    // Deduplicate user library entries favoring COMPLETED over PLANNING
+    val cleanLibrary = remember(userLibrary) {
+        userLibrary.groupBy { it.cleanTitle.trim().lowercase() }.values.map { group ->
+            group.maxWithOrNull(
+                compareBy<EnrichedMediaEntity> {
+                    when (it.userStatus.uppercase()) {
+                        "COMPLETED" -> 4
+                        "CURRENT" -> 3
+                        "PAUSED", "REPEATING" -> 2
+                        "PLANNING" -> 1
+                        else -> 0
+                    }
+                }.thenBy { it.cachedAt }
+            ) ?: group.first()
+        }
+    }
+
     // Fast O(1) matching between feed items and user's saved library
-    val libraryById = remember(userLibrary) { userLibrary.associateBy { it.id } }
-    val libraryByTitle = remember(userLibrary) {
-        userLibrary.associateBy { it.cleanTitle.trim().lowercase() }
+    val libraryById = remember(cleanLibrary) { cleanLibrary.associateBy { it.id } }
+    val libraryByTitle = remember(cleanLibrary) {
+        cleanLibrary.associateBy { it.cleanTitle.trim().lowercase() }
     }
 
     fun findMatchingLibraryEntry(media: EnrichedMediaEntity): EnrichedMediaEntity? {
@@ -259,12 +276,13 @@ fun HomeScreen(
 
     val handleMarkWatchedOrRead: (EnrichedMediaEntity) -> Unit = { item ->
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        val targetItem = findMatchingLibraryEntry(item) ?: item
         scope.launch(Dispatchers.IO) {
-            val totals = repository.getTotalEpisodesOrChapters(item, apiKey)
-            val totalEp = totals.first ?: item.episode ?: (if (item.mediaType.equals("Movie", true)) 1 else null)
-            val totalCh = totals.second ?: item.chapter
+            val totals = repository.getTotalEpisodesOrChapters(targetItem, apiKey)
+            val totalEp = totals.first ?: targetItem.episode ?: (if (targetItem.mediaType.equals("Movie", true)) 1 else null)
+            val totalCh = totals.second ?: targetItem.chapter
 
-            val completedItem = item.copy(
+            val completedItem = targetItem.copy(
                 userStatus = "COMPLETED",
                 episode = totalEp,
                 chapter = totalCh
@@ -277,7 +295,7 @@ fun HomeScreen(
                 tmdbAccountId
             )
             repository.updateMediaProgress(
-                media = item,
+                media = targetItem,
                 newStatus = "COMPLETED",
                 episode = totalEp,
                 chapter = totalCh,
@@ -287,7 +305,7 @@ fun HomeScreen(
                 tmdbAccountId = tmdbAccountId
             )
             launch(Dispatchers.Main) {
-                val isManga = item.mediaType.equals("Manga", true) || item.mediaType.equals("Manhwa", true)
+                val isManga = targetItem.mediaType.equals("Manga", true) || targetItem.mediaType.equals("Manhwa", true)
                 val countText = if (isManga) {
                     if (totalCh != null) "$totalCh chapters" else "all chapters"
                 } else {
@@ -307,14 +325,15 @@ fun HomeScreen(
 
     val handleStatusChange: (EnrichedMediaEntity, String) -> Unit = { media, newStatus ->
         selectedMediaForDetail = null
+        val target = findMatchingLibraryEntry(media) ?: media
         if (newStatus == "CURRENT") {
-            handleOpenTracking(media.copy(userStatus = "CURRENT"))
+            handleOpenTracking(target.copy(userStatus = "CURRENT"))
         }
         if (newStatus == "COMPLETED") {
-            handleMarkWatchedOrRead(media)
+            handleMarkWatchedOrRead(target)
         } else {
             scope.launch(Dispatchers.IO) {
-                val updated = media.copy(
+                val updated = target.copy(
                     userStatus = newStatus,
                     cachedAt = System.currentTimeMillis()
                 )
@@ -366,6 +385,9 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            repository.cleanupDuplicateHistory()
+        }
         if (discoverItems.isEmpty()) {
             fetchDiscover("Anime")
         }
