@@ -45,6 +45,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -86,6 +87,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -110,8 +112,10 @@ import com.scenefinder.ui.components.AgeRatingBadge
 import com.scenefinder.ui.components.ProgressTrackingDialog
 import com.scenefinder.ui.theme.LocalAppColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -125,6 +129,19 @@ private val GoldAccent = Color(0xFFFFD60A)
 private val GreenAccent = Color(0xFF30D158)
 private val OrangeAccent = Color(0xFFFF9F0A)
 private val DarkBg = Color(0xFF07080E)
+
+private val HeroRimBrush = Brush.verticalGradient(
+    listOf(Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.08f), Color.Transparent)
+)
+private val HeroScrimBrush = Brush.verticalGradient(
+    listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent, Color.Black.copy(alpha = 0.70f), Color.Black.copy(alpha = 0.95f))
+)
+private val CompactRimBrush = Brush.verticalGradient(
+    listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.05f), Color.Transparent)
+)
+private val CompactPosterScrim = Brush.verticalGradient(
+    listOf(Color.Transparent, Color.Transparent, Color.Black.copy(alpha = 0.70f))
+)
 
 @Composable
 fun HomeScreen(
@@ -157,13 +174,22 @@ fun HomeScreen(
         return libraryById[media.id] ?: libraryByTitle[media.cleanTitle.trim().lowercase()]
     }
 
-    var recommendations by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
-    var topAnime by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
-    var topManga by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
-    var topManhwa by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
-    var topMovies by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
-    var topTv by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    val cachedRecs = remember { repository.getCachedHomeRecommendations() ?: emptyList() }
+    val cachedAnime = remember { repository.getCachedTopAnime() ?: emptyList() }
+    val cachedManga = remember { repository.getCachedTopManga() ?: emptyList() }
+    val cachedManhwa = remember { repository.getCachedTopManhwa() ?: emptyList() }
+    val cachedMovies = remember { repository.getCachedTopMovies() ?: emptyList() }
+    val cachedTv = remember { repository.getCachedTopTv() ?: emptyList() }
+
+    val hasPreloadedData = cachedRecs.isNotEmpty() || cachedAnime.isNotEmpty()
+
+    var recommendations by remember { mutableStateOf(cachedRecs) }
+    var topAnime by remember { mutableStateOf(cachedAnime) }
+    var topManga by remember { mutableStateOf(cachedManga) }
+    var topManhwa by remember { mutableStateOf(cachedManhwa) }
+    var topMovies by remember { mutableStateOf(cachedMovies) }
+    var topTv by remember { mutableStateOf(cachedTv) }
+    var isLoading by remember { mutableStateOf(!hasPreloadedData) }
     var selectedMediaForDetail by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var trackingDialogMedia by remember { mutableStateOf<EnrichedMediaEntity?>(null) }
     var trackingTotalEpisodes by remember { mutableStateOf<Int?>(null) }
@@ -171,18 +197,33 @@ fun HomeScreen(
 
     var isRefreshingRecs by remember { mutableStateOf(false) }
     var selectedDiscoverCategory by remember { mutableStateOf("Anime") }
-    var discoverItems by remember { mutableStateOf<List<EnrichedMediaEntity>>(emptyList()) }
-    var isDiscoverLoading by remember { mutableStateOf(false) }
+    val initialDiscover = remember { repository.getCachedDiscover("Anime") ?: emptyList() }
+    var discoverItems by remember { mutableStateOf(initialDiscover) }
+    var isDiscoverLoading by remember { mutableStateOf(initialDiscover.isEmpty()) }
+    val discoverJobRef = remember { mutableStateOf<Job?>(null) }
 
     val fetchDiscover: (String) -> Unit = { category ->
-        isDiscoverLoading = true
-        scope.launch(Dispatchers.IO) {
-            val items = repository.getRandomDiscover(category, apiKey)
-            withContext(Dispatchers.Main) {
-                discoverItems = items
-                isDiscoverLoading = false
+        discoverJobRef.value?.cancel()
+        // If we don't have items, show shimmer; if we do have items, keep showing them while loading in background
+        if (discoverItems.isEmpty()) {
+            isDiscoverLoading = true
+        }
+        val job = scope.launch(Dispatchers.IO) {
+            try {
+                val items = repository.getRandomDiscover(category, apiKey)
+                if (isActive) {
+                    withContext(Dispatchers.Main) {
+                        if (items.isNotEmpty()) {
+                            discoverItems = items
+                        }
+                        isDiscoverLoading = false
+                    }
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) { isDiscoverLoading = false }
             }
         }
+        discoverJobRef.value = job
     }
 
     val handleRefreshRecommendations: () -> Unit = {
@@ -325,45 +366,49 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
-        fetchDiscover("Anime")
-        withContext(Dispatchers.IO) {
-            try {
-                coroutineScope {
-                    val recsDeferred = async { runCatching { repository.getHomeRecommendations(userLibrary) }.getOrDefault(emptyList()) }
-                    val animeDeferred = async { runCatching { repository.getTopAnime() }.getOrDefault(emptyList()) }
-                    val mangaDeferred = async { runCatching { repository.getTopManga() }.getOrDefault(emptyList()) }
-                    val manhwaDeferred = async { runCatching { repository.getTopManhwa() }.getOrDefault(emptyList()) }
-                    val moviesDeferred = async { runCatching { repository.getTopMovies(apiKey) }.getOrDefault(emptyList()) }
-                    val tvDeferred = async { runCatching { repository.getTopTvSeries(apiKey) }.getOrDefault(emptyList()) }
+        if (discoverItems.isEmpty()) {
+            fetchDiscover("Anime")
+        }
+        if (!hasPreloadedData) {
+            withContext(Dispatchers.IO) {
+                try {
+                    coroutineScope {
+                        val recsDeferred = async { runCatching { repository.getHomeRecommendations(userLibrary) }.getOrDefault(emptyList()) }
+                        val animeDeferred = async { runCatching { repository.getTopAnime() }.getOrDefault(emptyList()) }
+                        val mangaDeferred = async { runCatching { repository.getTopManga() }.getOrDefault(emptyList()) }
+                        val manhwaDeferred = async { runCatching { repository.getTopManhwa() }.getOrDefault(emptyList()) }
+                        val moviesDeferred = async { runCatching { repository.getTopMovies(apiKey) }.getOrDefault(emptyList()) }
+                        val tvDeferred = async { runCatching { repository.getTopTvSeries(apiKey) }.getOrDefault(emptyList()) }
 
-                    var recs = recsDeferred.await()
-                    val anime = animeDeferred.await()
-                    val manga = mangaDeferred.await()
-                    val manhwa = manhwaDeferred.await()
-                    val movies = moviesDeferred.await()
-                    val tv = tvDeferred.await()
+                        var recs = recsDeferred.await()
+                        val anime = animeDeferred.await()
+                        val manga = mangaDeferred.await()
+                        val manhwa = manhwaDeferred.await()
+                        val movies = moviesDeferred.await()
+                        val tv = tvDeferred.await()
 
-                    // Safe fallback for personalized recommendations if network returned empty
-                    if (recs.isEmpty() && userLibrary.isNotEmpty()) {
-                        recs = userLibrary.shuffled().take(10)
+                        // Safe fallback for personalized recommendations if network returned empty
+                        if (recs.isEmpty() && userLibrary.isNotEmpty()) {
+                            recs = userLibrary.shuffled().take(10)
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            recommendations = recs
+                            topAnime = anime
+                            topManga = manga
+                            topManhwa = manhwa
+                            topMovies = movies
+                            topTv = tv
+                            isLoading = false
+                        }
                     }
-
+                } catch (_: Throwable) {
                     withContext(Dispatchers.Main) {
-                        recommendations = recs
-                        topAnime = anime
-                        topManga = manga
-                        topManhwa = manhwa
-                        topMovies = movies
-                        topTv = tv
+                        if (recommendations.isEmpty() && userLibrary.isNotEmpty()) {
+                            recommendations = userLibrary.shuffled().take(10)
+                        }
                         isLoading = false
                     }
-                }
-            } catch (_: Throwable) {
-                withContext(Dispatchers.Main) {
-                    if (recommendations.isEmpty() && userLibrary.isNotEmpty()) {
-                        recommendations = userLibrary.shuffled().take(10)
-                    }
-                    isLoading = false
                 }
             }
         }
@@ -373,38 +418,39 @@ fun HomeScreen(
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val safeTopPadding = maxOf(statusBarTop, 44.dp)
 
+    // Precompute glow brush outside of composition to avoid per-frame allocation
+    val cyanGlow = if (colors.isDark) remember {
+        Brush.radialGradient(
+            colors = listOf(CyanAccent.copy(alpha = 0.11f), Color.Transparent),
+            radius = 450f,
+            center = androidx.compose.ui.geometry.Offset(Float.MAX_VALUE, 0f)
+        )
+    } else null
+    val purpleGlow = if (colors.isDark) remember {
+        Brush.radialGradient(
+            colors = listOf(PurpleAccent.copy(alpha = 0.07f), Color.Transparent),
+            radius = 500f,
+            center = androidx.compose.ui.geometry.Offset(0f, Float.MAX_VALUE / 2f)
+        )
+    } else null
+
+    val listState = rememberLazyListState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(if (colors.isDark) DarkBg else Color(0xFFF2F2F7))
     ) {
-        // Ambient Liquid Glass Glows (giving real refraction & depth to cards)
-        if (colors.isDark) {
-            Box(
-                modifier = Modifier
-                    .size(320.dp)
-                    .align(Alignment.TopEnd)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(CyanAccent.copy(alpha = 0.12f), Color.Transparent),
-                            radius = 450f
-                        )
-                    )
-            )
-            Box(
-                modifier = Modifier
-                    .size(360.dp)
-                    .align(Alignment.CenterStart)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(PurpleAccent.copy(alpha = 0.08f), Color.Transparent),
-                            radius = 500f
-                        )
-                    )
-            )
+        // Ambient glow drawn directly on canvas — no extra Box composables, zero overdraw cost
+        if (cyanGlow != null && purpleGlow != null) {
+            Box(modifier = Modifier.fillMaxSize().drawBehind({
+                drawRect(brush = cyanGlow)
+                drawRect(brush = purpleGlow)
+            }))
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 120.dp)
         ) {
@@ -666,7 +712,7 @@ fun HomeScreen(
 
                 // Discover Items Carousel
                 item {
-                    if (isDiscoverLoading) {
+                    if (isDiscoverLoading && discoverItems.isEmpty()) {
                         CompactRowShimmer(isDark = colors.isDark)
                     } else if (discoverItems.isNotEmpty()) {
                         CompactCardRow(
@@ -678,6 +724,39 @@ fun HomeScreen(
                             onWatchingClick = handleOpenTracking,
                             onMarkWatchedOrRead = handleMarkWatchedOrRead
                         )
+                    } else {
+                        // Resilient retry fallback UI
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (colors.isDark) Color(0x1AFFFFFF) else Color(0x0D000000))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    fetchDiscover(selectedDiscoverCategory)
+                                }
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Retry",
+                                    tint = CyanAccent,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    "Tap to load $selectedDiscoverCategory",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -1192,23 +1271,6 @@ private fun CinematicHeroCard(
     val currentStatus = libraryMatch?.userStatus?.uppercase()
     val isCompleted = currentStatus == "COMPLETED"
 
-    val rim = Brush.verticalGradient(
-        listOf(
-            Color.White.copy(alpha = 0.35f),
-            Color.White.copy(alpha = 0.08f),
-            Color.Transparent
-        )
-    )
-
-    val scrim = Brush.verticalGradient(
-        listOf(
-            Color.Black.copy(alpha = 0.35f),
-            Color.Transparent,
-            Color.Black.copy(alpha = 0.70f),
-            Color.Black.copy(alpha = 0.95f)
-        )
-    )
-
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -1223,12 +1285,15 @@ private fun CinematicHeroCard(
     Surface(
         shape = RoundedCornerShape(26.dp),
         color = if (isDark) GlassDark else GlassLight,
-        border = BorderStroke(1.dp, rim),
+        border = BorderStroke(1.dp, HeroRimBrush),
         shadowElevation = 14.dp,
         modifier = Modifier
             .width(280.dp)
             .height(340.dp)
-            .scale(scale)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1260,7 +1325,7 @@ private fun CinematicHeroCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(scrim)
+                    .background(HeroScrimBrush)
             )
 
             // Top Badges Row: Media Type, Age Rating, Library Status & Rating Star
@@ -1576,14 +1641,6 @@ private fun CompactGlassCard(
     val currentStatus = libraryMatch?.userStatus?.uppercase()
     val isCompleted = currentStatus == "COMPLETED"
 
-    val rim = Brush.verticalGradient(
-        listOf(
-            Color.White.copy(alpha = 0.30f),
-            Color.White.copy(alpha = 0.05f),
-            Color.Transparent
-        )
-    )
-
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -1598,11 +1655,14 @@ private fun CompactGlassCard(
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = if (isDark) GlassDark else GlassLight,
-        border = BorderStroke(1.dp, rim),
+        border = BorderStroke(1.dp, CompactRimBrush),
         shadowElevation = 8.dp,
         modifier = Modifier
             .width(146.dp)
-            .scale(scale)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1640,15 +1700,7 @@ private fun CompactGlassCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.70f)
-                                )
-                            )
-                        )
+                        .background(CompactPosterScrim)
                 )
 
                 // Top-Left Badges: Rank Badge & Age Rating Badge

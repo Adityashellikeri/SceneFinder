@@ -160,7 +160,11 @@ private val storyRingBrushHoriz = Brush.horizontalGradient(
 )
 
 private val posterGradientOverlay = Brush.verticalGradient(
-    listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+    listOf(
+        Color.Transparent,
+        Color.Black.copy(alpha = 0.75f),
+        Color.Black.copy(alpha = 0.96f)
+    )
 )
 
 private fun getMediaTypeColor(type: String): Color = when (type) {
@@ -1962,8 +1966,8 @@ private fun IGPosterCard(
     val imageRequest = remember(media.posterUrl) {
         ImageRequest.Builder(context)
             .data(media.posterUrl)
-            .size(360, 540)
-            .crossfade(140)
+            .size(240, 360)
+            .crossfade(100)
             .allowHardware(true)
             .allowRgb565(true)
             .memoryCachePolicy(CachePolicy.ENABLED)
@@ -2015,15 +2019,7 @@ private fun IGPosterCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.75f),
-                            Color.Black.copy(alpha = 0.96f)
-                        )
-                    )
-                )
+                .background(posterGradientOverlay)
                 .padding(horizontal = 6.dp, vertical = 6.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {

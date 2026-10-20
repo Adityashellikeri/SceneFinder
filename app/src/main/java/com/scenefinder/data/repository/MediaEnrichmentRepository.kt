@@ -1922,8 +1922,40 @@ class MediaEnrichmentRepository @Inject constructor(
                 }
             }
         } catch (_: Exception) {}
+        val catKey = category.lowercase().trim()
+        if (list.isNotEmpty()) {
+            searchCache.put("discover_$catKey", list)
+        } else {
+            // Fallback: use previously cached discover items, or fallback to top items for this category
+            val cachedDiscover = searchCache.get("discover_$catKey")
+            if (!cachedDiscover.isNullOrEmpty()) {
+                return@withContext cachedDiscover.shuffled()
+            }
+            val fallbackTop = when (catKey) {
+                "anime" -> searchCache.get("top_anime") ?: getTopAnime()
+                "manga" -> searchCache.get("top_manga") ?: getTopManga()
+                "manhwa" -> searchCache.get("top_manhwa") ?: getTopManhwa()
+                "movie", "movies" -> searchCache.get("top_movies") ?: getTopMovies(effectiveKey)
+                else -> searchCache.get("top_tv") ?: getTopTvSeries(effectiveKey)
+            }
+            if (fallbackTop.isNotEmpty()) {
+                list.addAll(fallbackTop.shuffled().take(12))
+            }
+        }
         list.shuffled()
     }
+
+    fun getCachedDiscover(category: String): List<EnrichedMediaEntity>? {
+        val catKey = category.lowercase().trim()
+        return searchCache.get("discover_$catKey") ?: searchCache.get("top_$catKey")
+    }
+
+    fun getCachedHomeRecommendations(): List<EnrichedMediaEntity>? = searchCache.get("home_recommendations")
+    fun getCachedTopAnime(): List<EnrichedMediaEntity>? = searchCache.get("top_anime")
+    fun getCachedTopManga(): List<EnrichedMediaEntity>? = searchCache.get("top_manga")
+    fun getCachedTopManhwa(): List<EnrichedMediaEntity>? = searchCache.get("top_manhwa")
+    fun getCachedTopMovies(): List<EnrichedMediaEntity>? = searchCache.get("top_movies")
+    fun getCachedTopTv(): List<EnrichedMediaEntity>? = searchCache.get("top_tv")
 
     suspend fun updateMediaProgress(
         media: EnrichedMediaEntity,

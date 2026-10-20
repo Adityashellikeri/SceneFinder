@@ -482,20 +482,12 @@ private fun MainAppScaffold(
                 .padding(bottom = paddingValues.calculateBottomPadding())
                 .background(colors.background)
         ) {
-            AnimatedContent(
-                targetState = selectedIndex,
-                transitionSpec = {
-                    if (targetState > initialState) {
-                        (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it / 4 } + fadeIn(tween(240)))
-                            .togetherWith(slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -it / 4 } + fadeOut(tween(180)))
-                    } else {
-                        (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -it / 4 } + fadeIn(tween(240)))
-                            .togetherWith(slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { it / 4 } + fadeOut(tween(180)))
-                    }
-                },
-                label = "screen_transition",
-                modifier = Modifier.fillMaxSize()
-            ) { targetIndex ->
+            Crossfade(
+            targetState = selectedIndex,
+            animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+            label = "screen_crossfade",
+            modifier = Modifier.fillMaxSize()
+        ) { targetIndex ->
                 when (targetIndex) {
                     0 -> HomeScreen(
                         dao = dao,
