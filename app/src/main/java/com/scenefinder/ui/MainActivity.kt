@@ -382,8 +382,8 @@ private fun MainAppScaffold(
             if (selectedIndex in 0..2) {
                 val glassRim = Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.35f),
-                        Color.White.copy(alpha = 0.08f),
+                        Color.White.copy(alpha = 0.32f),
+                        Color.White.copy(alpha = 0.06f),
                         Color.Transparent
                     )
                 )
@@ -391,30 +391,33 @@ private fun MainAppScaffold(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(32.dp),
-                        color = if (colors.isDark) Color(0xCC121524) else Color(0xEEFFFFFF),
-                        border = BorderStroke(1.dp, glassRim),
-                        shadowElevation = 16.dp,
+                        shape = RoundedCornerShape(28.dp),
+                        color = if (colors.isDark) Color(0xE80D101D) else Color(0xF2FFFFFF),
+                        border = BorderStroke(0.85.dp, glassRim),
+                        shadowElevation = 20.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(60.dp)
+                            .height(56.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .padding(horizontal = 6.dp, vertical = 5.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             navItems.forEachIndexed { index, item ->
                                 val selected = selectedIndex == index
                                 val iconScale by animateFloatAsState(
-                                    targetValue = if (selected) 1.12f else 1.0f,
-                                    animationSpec = tween(160),
+                                    targetValue = if (selected) 1.15f else 1.0f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessLow
+                                    ),
                                     label = "tab_scale"
                                 )
 
@@ -422,22 +425,22 @@ private fun MainAppScaffold(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .clip(RoundedCornerShape(24.dp))
+                                        .clip(RoundedCornerShape(22.dp))
                                         .then(
                                             if (selected) {
                                                 Modifier
                                                     .background(
                                                         Brush.horizontalGradient(
                                                             listOf(
-                                                                Color(0xFF00F2FE).copy(alpha = 0.20f),
-                                                                Color(0xFF0A84FF).copy(alpha = 0.24f)
+                                                                Color(0xFF00F2FE).copy(alpha = 0.18f),
+                                                                Color(0xFF0A84FF).copy(alpha = 0.22f)
                                                             )
                                                         )
                                                     )
                                                     .border(
-                                                        0.8.dp,
-                                                        Color(0xFF00F2FE).copy(alpha = 0.5f),
-                                                        RoundedCornerShape(24.dp)
+                                                        0.75.dp,
+                                                        Color(0xFF00F2FE).copy(alpha = 0.55f),
+                                                        RoundedCornerShape(22.dp)
                                                     )
                                             } else {
                                                 Modifier
@@ -454,25 +457,26 @@ private fun MainAppScaffold(
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Icon(
                                             imageVector = if (selected) item.selectedIcon else item.icon,
                                             contentDescription = item.label,
                                             modifier = Modifier
-                                                .size(21.dp)
+                                                .size(20.dp)
                                                 .graphicsLayer {
                                                     scaleX = iconScale
                                                     scaleY = iconScale
                                                 },
-                                            tint = if (selected) Color(0xFF00F2FE) else if (colors.isDark) Color(0xFF8E8EA0) else Color(0xFF636375)
+                                            tint = if (selected) Color(0xFF00F2FE) else if (colors.isDark) Color(0xFF8688A0) else Color(0xFF6B6E82)
                                         )
                                         AnimatedVisibility(visible = selected) {
                                             Text(
                                                 text = item.label,
-                                                fontSize = 12.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (colors.isDark) Color.White else Color(0xFF121524)
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                letterSpacing = 0.2.sp,
+                                                color = if (colors.isDark) Color.White else Color(0xFF0E111C)
                                             )
                                         }
                                     }

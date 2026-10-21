@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -690,7 +691,7 @@ fun HomeScreen(
                 item {
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)
                     ) {
                         items(listOf("Anime", "Manga", "Manhwa", "Movie", "TV Series"), contentType = { "CategoryChip" }) { cat ->
                             val isSelected = cat.equals(selectedDiscoverCategory, ignoreCase = true)
@@ -701,18 +702,37 @@ fun HomeScreen(
                                 "Movie" -> BlueAccent
                                 else -> OrangeAccent
                             }
+                            val chipIcon = when (cat) {
+                                "Anime" -> Icons.Default.Tv
+                                "Manga" -> Icons.Default.AutoStories
+                                "Manhwa" -> Icons.Default.AutoStories
+                                "Movie" -> Icons.Default.Movie
+                                else -> Icons.Default.Tv
+                            }
+                            val scale by animateFloatAsState(
+                                targetValue = if (isSelected) 1.04f else 1f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                ),
+                                label = "cat_scale"
+                            )
 
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .graphicsLayer {
+                                        scaleX = scale
+                                        scaleY = scale
+                                    }
+                                    .clip(RoundedCornerShape(14.dp))
                                     .background(
                                         if (isSelected) chipAccent.copy(alpha = 0.22f)
-                                        else if (colors.isDark) Color(0x1AFFFFFF) else Color(0x0D000000)
+                                        else if (colors.isDark) Color(0x18FFFFFF) else Color(0x0C000000)
                                     )
                                     .border(
                                         width = if (isSelected) 1.dp else 0.6.dp,
-                                        color = if (isSelected) chipAccent else Color.White.copy(alpha = 0.15f),
-                                        shape = RoundedCornerShape(12.dp)
+                                        color = if (isSelected) chipAccent.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(14.dp)
                                     )
                                     .clickable(
                                         interactionSource = remember { MutableInteractionSource() },
@@ -725,15 +745,26 @@ fun HomeScreen(
                                             }
                                         }
                                     )
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                    .padding(horizontal = 13.dp, vertical = 7.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = cat,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                    color = if (isSelected) chipAccent else colors.textPrimary
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = chipIcon,
+                                        contentDescription = null,
+                                        tint = if (isSelected) chipAccent else colors.textSecondary,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Text(
+                                        text = cat,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        color = if (isSelected) chipAccent else colors.textPrimary
+                                    )
+                                }
                             }
                         }
                     }
@@ -1300,292 +1331,323 @@ private fun CinematicHeroCard(
         label = "hero_scale"
     )
 
-    Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = if (isDark) GlassDark else GlassLight,
-        border = BorderStroke(1.dp, HeroRimBrush),
-        shadowElevation = 14.dp,
-        modifier = Modifier
-            .width(280.dp)
-            .height(340.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onCardClick
-            )
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Full-bleed Image Background
-            val url = media.bannerUrl ?: media.posterUrl
-            if (!url.isNullOrBlank()) {
-                val req = remember(url) {
-                    ImageRequest.Builder(context)
-                        .data(url)
-                        .size(560, 680)
-                        .crossfade(180)
-                        .allowHardware(true)
-                        .allowRgb565(true)
-                        .build()
-                }
-                AsyncImage(
-                    model = req,
-                    contentDescription = media.cleanTitle,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
+    val auraColor = when (media.mediaType.lowercase()) {
+        "anime" -> CyanAccent
+        "manga" -> GreenAccent
+        "manhwa" -> Color(0xFF32D74B)
+        "movie" -> BlueAccent
+        else -> PurpleAccent
+    }
 
-            // Cinematic Scrim Overlay
+    Box(
+        modifier = Modifier
+            .width(286.dp)
+            .height(348.dp)
+    ) {
+        // Ambient soft backdrop glow drawn on canvas (zero extra composables or overdraw)
+        if (isDark) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(HeroScrimBrush)
-            )
-
-            // Top Badges Row: Media Type, Age Rating, Library Status & Rating Star
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Media Type Glass Pill
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.70f))
-                            .border(
-                                0.7.dp,
-                                CyanAccent.copy(alpha = 0.6f),
-                                RoundedCornerShape(8.dp)
+                    .padding(8.dp)
+                    .drawBehind {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(auraColor.copy(alpha = 0.16f), Color.Transparent),
+                                radius = size.width * 0.75f,
+                                center = center
                             )
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = media.mediaType.uppercase(),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = CyanAccent,
-                            letterSpacing = 0.5.sp
                         )
                     }
+            )
+        }
 
-                    // Age Rating Badge (18+, 16+, 13+, PG-13, etc.)
-                    if (!media.ageRating.isNullOrBlank()) {
-                        AgeRatingBadge(rating = media.ageRating, fontSize = 9.sp)
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = if (isDark) GlassDark else GlassLight,
+            border = BorderStroke(1.dp, HeroRimBrush),
+            shadowElevation = 14.dp,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onCardClick
+                )
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Full-bleed Image Background
+                val url = media.bannerUrl ?: media.posterUrl
+                if (!url.isNullOrBlank()) {
+                    val req = remember(url) {
+                        ImageRequest.Builder(context)
+                            .data(url)
+                            .size(572, 696)
+                            .crossfade(180)
+                            .allowHardware(true)
+                            .allowRgb565(true)
+                            .build()
                     }
+                    AsyncImage(
+                        model = req,
+                        contentDescription = media.cleanTitle,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
-                    // Library Status Badge at top (No longer squishes the title!)
-                    if (libraryMatch != null) {
-                        val (sColor, sText) = when (currentStatus) {
-                            "CURRENT" -> CyanAccent to if (isReadType) "Reading" else "Watching"
-                            "COMPLETED" -> GreenAccent to "Done"
-                            "DROPPED" -> Color(0xFFFF453A) to "Dropped"
-                            else -> PurpleAccent to "Plan"
-                        }
+                // Cinematic Scrim Overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(HeroScrimBrush)
+                )
+
+                // Top Badges Row: Media Type, Age Rating, Library Status & Rating Star
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Media Type Glass Pill
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color.Black.copy(alpha = 0.75f))
-                                .border(0.7.dp, sColor.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .background(Color.Black.copy(alpha = 0.72f))
+                                .border(
+                                    0.75.dp,
+                                    auraColor.copy(alpha = 0.7f),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
-                            Text(text = sText, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = sColor)
-                        }
-                    }
-                }
-
-                // Star Rating Glass Pill
-                media.rating?.let { score ->
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.70f))
-                            .border(
-                                0.7.dp,
-                                GoldAccent.copy(alpha = 0.5f),
-                                RoundedCornerShape(8.dp)
+                            Text(
+                                text = media.mediaType.uppercase(),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = auraColor,
+                                letterSpacing = 0.6.sp
                             )
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = null,
-                            tint = GoldAccent,
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Text(
-                            text = "%.1f".format(score),
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
+                        }
 
-            // Bottom Content on Scrim
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp)
-            ) {
-                // Full Title (Entire width available without being squished)
-                Text(
-                    text = media.cleanTitle,
-                    fontSize = 16.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    letterSpacing = (-0.2).sp,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                        // Age Rating Badge (18+, 16+, 13+, PG-13, etc.)
+                        if (!media.ageRating.isNullOrBlank()) {
+                            AgeRatingBadge(rating = media.ageRating, fontSize = 9.sp)
+                        }
 
-                Spacer(Modifier.height(3.dp))
-
-                // Logical metadata text
-                val metaText = when {
-                    isCompleted -> {
-                        val count = if (isReadType) (libraryMatch?.chapter ?: media.chapter) else (libraryMatch?.episode ?: media.episode)
-                        if (count != null && count > 0) "Completed • All $count ${if (isReadType) "chapters" else "episodes"}"
-                        else "Completed • ${media.mediaType}"
-                    }
-                    currentStatus == "CURRENT" -> {
-                        val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
-                        val total = if (isReadType) media.chapter else media.episode
-                        if (ep != null && total != null && total > 0) "Watching: ${if (isReadType) "Ch" else "Ep"} $ep of $total"
-                        else if (ep != null) "Watching: ${if (isReadType) "Ch" else "Ep"} $ep"
-                        else "Watching • ${media.mediaType}"
-                    }
-                    currentStatus == "PLANNING" -> {
-                        val total = if (isReadType) media.chapter else media.episode
-                        if (total != null && total > 0) "Plan to ${if (isReadType) "Read" else "Watch"} • $total ${if (isReadType) "chapters" else "episodes"}"
-                        else "Plan to ${if (isReadType) "Read" else "Watch"} • ${media.mediaType}"
-                    }
-                    else -> {
-                        if (media.year != null) "${media.year} • ${media.mediaType}" else media.mediaType
-                    }
-                }
-                Text(
-                    text = metaText,
-                    fontSize = 11.5.sp,
-                    color = Color(0xFFB0B0C4),
-                    fontWeight = FontWeight.Medium
-                )
-
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = media.overview ?: "Personalized recommendation",
-                    fontSize = 11.sp,
-                    color = Color(0xFFC8C8DC),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 15.sp
-                )
-                Spacer(Modifier.height(13.dp))
-
-                // Action Pill: single button — Add to Library or status pill, both open popup
-                when {
-                    !isSaved -> {
-                        // Unsaved: "+ Add to Library" -> opens popup
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(42.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(
-                                    Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
-                                )
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onAddToLibrary
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        // Library Status Badge at top
+                        if (libraryMatch != null) {
+                            val (sColor, sText) = when (currentStatus) {
+                                "CURRENT" -> CyanAccent to if (isReadType) "Reading" else "Watching"
+                                "COMPLETED" -> GreenAccent to "Done"
+                                "DROPPED" -> Color(0xFFFF453A) to "Dropped"
+                                else -> PurpleAccent to "Plan"
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.Black.copy(alpha = 0.78f))
+                                    .border(0.7.dp, sColor.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 7.dp, vertical = 3.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = null,
-                                    tint = Color(0xFF07080E),
-                                    modifier = Modifier.size(17.dp)
-                                )
-                                Text(
-                                    text = "Add to Library",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF07080E)
-                                )
+                                Text(text = sText, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = sColor)
                             }
                         }
                     }
 
-                    else -> {
-                        // Saved: single color-coded status pill -> tapping opens popup
-                        val (pillColor, pillIcon, pillLabel) = when (currentStatus) {
-                            "CURRENT" -> {
-                                val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
-                                val label = if (ep != null) {
-                                    if (isReadType) "Ch. $ep" else "Ep. $ep"
-                                } else {
-                                    if (isReadType) "Reading" else "Watching"
+                    // Star Rating Glass Pill
+                    media.rating?.let { score ->
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.72f))
+                                .border(
+                                    0.7.dp,
+                                    GoldAccent.copy(alpha = 0.55f),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = null,
+                                tint = GoldAccent,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Text(
+                                text = "%.1f".format(score),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                // Bottom Content on Scrim
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                ) {
+                    // Full Title
+                    Text(
+                        text = media.cleanTitle,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        letterSpacing = (-0.3).sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(3.dp))
+
+                    // Logical metadata text
+                    val metaText = when {
+                        isCompleted -> {
+                            val count = if (isReadType) (libraryMatch?.chapter ?: media.chapter) else (libraryMatch?.episode ?: media.episode)
+                            if (count != null && count > 0) "Completed • All $count ${if (isReadType) "chapters" else "episodes"}"
+                            else "Completed • ${media.mediaType}"
+                        }
+                        currentStatus == "CURRENT" -> {
+                            val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                            val total = if (isReadType) media.chapter else media.episode
+                            if (ep != null && total != null && total > 0) "Watching: ${if (isReadType) "Ch" else "Ep"} $ep of $total"
+                            else if (ep != null) "Watching: ${if (isReadType) "Ch" else "Ep"} $ep"
+                            else "Watching • ${media.mediaType}"
+                        }
+                        currentStatus == "PLANNING" -> {
+                            val total = if (isReadType) media.chapter else media.episode
+                            if (total != null && total > 0) "Plan to ${if (isReadType) "Read" else "Watch"} • $total ${if (isReadType) "chapters" else "episodes"}"
+                            else "Plan to ${if (isReadType) "Read" else "Watch"} • ${media.mediaType}"
+                        }
+                        else -> {
+                            if (media.year != null) "${media.year} • ${media.mediaType}" else media.mediaType
+                        }
+                    }
+                    Text(
+                        text = metaText,
+                        fontSize = 11.5.sp,
+                        color = Color(0xFFB0B0C4),
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = media.overview ?: "Personalized recommendation",
+                        fontSize = 11.sp,
+                        color = Color(0xFFC8C8DC),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 15.sp
+                    )
+                    Spacer(Modifier.height(13.dp))
+
+                    // Action Pill: single button — Add to Library or status pill, both open popup
+                    when {
+                        !isSaved -> {
+                            // Unsaved: "+ Add to Library" -> opens popup
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(42.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
+                                    )
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onAddToLibrary
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = Color(0xFF07080E),
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                    Text(
+                                        text = "Add to Library",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF07080E)
+                                    )
                                 }
-                                Triple(CyanAccent, if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow, label)
                             }
-                            "COMPLETED" ->
-                                Triple(GreenAccent, Icons.Default.Check, "Completed")
-                            "DROPPED" ->
-                                Triple(Color(0xFFFF453A), Icons.Default.Check, "Dropped")
-                            else -> // PLANNING or anything else
-                                Triple(PurpleAccent, Icons.Default.BookmarkAdded, if (isReadType) "Plan to Read" else "Plan to Watch")
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(42.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(pillColor.copy(alpha = 0.18f))
-                                .border(0.8.dp, pillColor.copy(alpha = 0.60f), RoundedCornerShape(14.dp))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onAddToLibrary // Opens popup!
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        else -> {
+                            // Saved: single color-coded status pill -> tapping opens popup
+                            val (pillColor, pillIcon, pillLabel) = when (currentStatus) {
+                                "CURRENT" -> {
+                                    val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                                    val label = if (ep != null) {
+                                        if (isReadType) "Ch. $ep" else "Ep. $ep"
+                                    } else {
+                                        if (isReadType) "Reading" else "Watching"
+                                    }
+                                    Triple(CyanAccent, if (isReadType) Icons.Default.AutoStories else Icons.Default.PlayArrow, label)
+                                }
+                                "COMPLETED" ->
+                                    Triple(GreenAccent, Icons.Default.Check, "Completed")
+                                "DROPPED" ->
+                                    Triple(Color(0xFFFF453A), Icons.Default.Check, "Dropped")
+                                else -> // PLANNING or anything else
+                                    Triple(PurpleAccent, Icons.Default.BookmarkAdded, if (isReadType) "Plan to Read" else "Plan to Watch")
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(42.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(pillColor.copy(alpha = 0.18f))
+                                    .border(0.8.dp, pillColor.copy(alpha = 0.60f), RoundedCornerShape(14.dp))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = onAddToLibrary // Opens popup!
+                                    ),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    pillIcon,
-                                    contentDescription = null,
-                                    tint = pillColor,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = pillLabel,
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = pillColor
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        pillIcon,
+                                        contentDescription = null,
+                                        tint = pillColor,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = pillLabel,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = pillColor
+                                    )
+                                }
                             }
                         }
                     }
@@ -1721,46 +1783,34 @@ private fun CompactGlassCard(
                         .background(CompactPosterScrim)
                 )
 
-                // Top-Left Badges: Rank Badge & Age Rating Badge
-                Row(
+                // Top-Left: Rank Badge
+                val rankBg = when (rank) {
+                    1 -> RankBrushGold
+                    2 -> RankBrushSilver
+                    3 -> RankBrushBronze
+                    else -> RankBrushDefault
+                }
+                val rankTextColor = if (rank in 1..3) Color.Black else CyanAccent
+
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Use file-level singleton brushes — no allocation per recomposition
-                    val rankBg = when (rank) {
-                        1 -> RankBrushGold
-                        2 -> RankBrushSilver
-                        3 -> RankBrushBronze
-                        else -> RankBrushDefault
-                    }
-                    val rankTextColor = if (rank in 1..3) Color.Black else CyanAccent
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(rankBg)
-                            .border(
-                                0.6.dp,
-                                if (rank in 1..3) Color.White.copy(alpha = 0.5f) else CyanAccent.copy(alpha = 0.5f),
-                                RoundedCornerShape(7.dp)
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "#$rank",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = rankTextColor
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(rankBg)
+                        .border(
+                            0.6.dp,
+                            if (rank in 1..3) Color.White.copy(alpha = 0.5f) else CyanAccent.copy(alpha = 0.5f),
+                            RoundedCornerShape(7.dp)
                         )
-                    }
-
-                    // Age Rating Badge on Poster
-                    if (!media.ageRating.isNullOrBlank()) {
-                        AgeRatingBadge(rating = media.ageRating, fontSize = 8.sp)
-                    }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "#$rank",
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = rankTextColor
+                    )
                 }
 
                 // Top-Right: Library Status Badge if saved
@@ -1776,38 +1826,78 @@ private fun CompactGlassCard(
                             .align(Alignment.TopEnd)
                             .padding(6.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color.Black.copy(alpha = 0.80f))
-                            .border(0.6.dp, sColor.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.82f))
+                            .border(0.6.dp, sColor.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Text(text = sText, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = sColor)
                     }
                 }
 
-                // Star Rating
-                media.rating?.let { score ->
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(6.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.Black.copy(alpha = 0.78f))
-                            .padding(horizontal = 5.dp, vertical = 2.5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = null,
-                            tint = GoldAccent,
-                            modifier = Modifier.size(9.dp)
-                        )
-                        Text(
-                            text = "%.1f".format(score),
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                // Bottom Row on Poster: Age Rating (Left) & Star Rating (Right)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!media.ageRating.isNullOrBlank()) {
+                        AgeRatingBadge(rating = media.ageRating, fontSize = 8.sp)
+                    } else {
+                        Spacer(Modifier.width(1.dp))
+                    }
+
+                    media.rating?.let { score ->
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.Black.copy(alpha = 0.82f))
+                                .border(0.5.dp, GoldAccent.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 5.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = null,
+                                tint = GoldAccent,
+                                modifier = Modifier.size(9.dp)
+                            )
+                            Text(
+                                text = "%.1f".format(score),
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                // Streaming-Style Watch Progress Indicator Bar at Bottom of Poster
+                if (currentStatus == "CURRENT") {
+                    val ep = if (isReadType) libraryMatch?.chapter else libraryMatch?.episode
+                    val total = if (isReadType) media.chapter else media.episode
+                    if (ep != null && total != null && total > 0) {
+                        val progress = (ep.toFloat() / total.toFloat()).coerceIn(0.05f, 1f)
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(2.5.dp)
+                                .background(Color.Black.copy(alpha = 0.6f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(progress)
+                                    .clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
+                                    .background(
+                                        Brush.horizontalGradient(listOf(CyanAccent, BlueAccent))
+                                    )
+                            )
+                        }
                     }
                 }
             }
