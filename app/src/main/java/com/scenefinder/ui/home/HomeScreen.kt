@@ -143,6 +143,14 @@ private val CompactPosterScrim = Brush.verticalGradient(
     listOf(Color.Transparent, Color.Transparent, Color.Black.copy(alpha = 0.70f))
 )
 
+// Pre-computed rank badge gradients — allocated once, never reallocated on recomposition
+private val RankBrushGold   = Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
+private val RankBrushSilver = Brush.horizontalGradient(listOf(Color(0xFFE0E0E0), Color(0xFFB0B0B0)))
+private val RankBrushBronze = Brush.horizontalGradient(listOf(Color(0xFFCD7F32), Color(0xFF8B4513)))
+private val RankBrushDefault = Brush.horizontalGradient(
+    listOf(Color.Black.copy(alpha = 0.82f), Color.Black.copy(alpha = 0.82f))
+)
+
 @Composable
 fun HomeScreen(
     dao: EnrichedMediaDao,
@@ -440,21 +448,9 @@ fun HomeScreen(
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val safeTopPadding = maxOf(statusBarTop, 44.dp)
 
-    // Precompute glow brush outside of composition to avoid per-frame allocation
-    val cyanGlow = if (colors.isDark) remember {
-        Brush.radialGradient(
-            colors = listOf(CyanAccent.copy(alpha = 0.11f), Color.Transparent),
-            radius = 450f,
-            center = androidx.compose.ui.geometry.Offset(Float.MAX_VALUE, 0f)
-        )
-    } else null
-    val purpleGlow = if (colors.isDark) remember {
-        Brush.radialGradient(
-            colors = listOf(PurpleAccent.copy(alpha = 0.07f), Color.Transparent),
-            radius = 500f,
-            center = androidx.compose.ui.geometry.Offset(0f, Float.MAX_VALUE / 2f)
-        )
-    } else null
+    // Ambient glow colours — radial center is set inside drawBehind so we can use real pixel coords
+    // Using Float.MAX_VALUE as center causes Skia/Vulkan float overflow → GPU stall every frame
+    val isDarkMode = colors.isDark
 
     val listState = rememberLazyListState()
 
@@ -464,8 +460,19 @@ fun HomeScreen(
             .background(if (colors.isDark) DarkBg else Color(0xFFF2F2F7))
     ) {
         // Ambient glow drawn directly on canvas — no extra Box composables, zero overdraw cost
-        if (cyanGlow != null && purpleGlow != null) {
+        // Glow centres are now in real canvas pixel coords to avoid shader NaN/overflow on LTPO panels
+        if (isDarkMode) {
             Box(modifier = Modifier.fillMaxSize().drawBehind({
+                val cyanGlow = Brush.radialGradient(
+                    colors = listOf(CyanAccent.copy(alpha = 0.11f), Color.Transparent),
+                    radius = size.width * 0.85f,
+                    center = androidx.compose.ui.geometry.Offset(size.width, 0f)
+                )
+                val purpleGlow = Brush.radialGradient(
+                    colors = listOf(PurpleAccent.copy(alpha = 0.07f), Color.Transparent),
+                    radius = size.width * 0.95f,
+                    center = androidx.compose.ui.geometry.Offset(0f, size.height * 0.4f)
+                )
                 drawRect(brush = cyanGlow)
                 drawRect(brush = purpleGlow)
             }))
@@ -1129,34 +1136,23 @@ private fun PulsingLiveDot(
     color: Color = CyanAccent,
     modifier: Modifier = Modifier
 ) {
+    // Use a slow 2.4s cycle (vs 0.9s) — cuts GPU wake frequency by 2.7×.
+    // The dot still visually pulses but at a pace that lets the display idle between frames.
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_dot_transition")
     val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
+        initialValue = 0.45f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
+            animation = tween(2400, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_alpha"
-    )
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
     )
 
     Box(
         modifier = modifier
             .size(6.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-            }
+            .graphicsLayer { this.alpha = alpha }
             .clip(CircleShape)
             .background(color)
     )
@@ -1733,16 +1729,12 @@ private fun CompactGlassCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    // Use file-level singleton brushes — no allocation per recomposition
                     val rankBg = when (rank) {
-                        1 -> Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
-                        2 -> Brush.horizontalGradient(listOf(Color(0xFFE0E0E0), Color(0xFFB0B0B0)))
-                        3 -> Brush.horizontalGradient(listOf(Color(0xFFCD7F32), Color(0xFF8B4513)))
-                        else -> Brush.horizontalGradient(
-                            listOf(
-                                Color.Black.copy(alpha = 0.82f),
-                                Color.Black.copy(alpha = 0.82f)
-                            )
-                        )
+                        1 -> RankBrushGold
+                        2 -> RankBrushSilver
+                        3 -> RankBrushBronze
+                        else -> RankBrushDefault
                     }
                     val rankTextColor = if (rank in 1..3) Color.Black else CyanAccent
 

@@ -298,29 +298,37 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Request a smooth refresh rate without *locking* to max.
+     *
+     * Locking preferredDisplayModeId = highestMode.modeId forces the display to run at maximum
+     * refresh rate (e.g. 120 Hz / 144 Hz) 100 % of the time, even when the UI is completely
+     * static. On modern LTPO panels this kills battery by preventing the hardware from throttling
+     * down to 1–30 Hz between frames.
+     *
+     * Using preferredRefreshRate lets the OS negotiate the best rate: fast during scrolling /
+     * animation, slow during idle — giving us smooth animations *and* good battery life.
+     */
     private fun applyNativeMaxRefreshRate() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val display = this.display
                 val modes = display?.supportedModes ?: emptyArray()
-                val highestMode = modes.maxByOrNull { it.refreshRate }
-                if (highestMode != null) {
-                    val lp = window.attributes
-                    lp.preferredDisplayModeId = highestMode.modeId
-                    window.attributes = lp
-                }
+                val highestRate = modes.maxByOrNull { it.refreshRate }?.refreshRate ?: return
+                val lp = window.attributes
+                // Hint, not a lock — the compositor can honour or ignore it per vsync budget
+                lp.preferredRefreshRate = highestRate
+                window.attributes = lp
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 @Suppress("DEPRECATION")
                 val modes = windowManager.defaultDisplay?.supportedModes ?: emptyArray()
-                val highestMode = modes.maxByOrNull { it.refreshRate }
-                if (highestMode != null) {
-                    val lp = window.attributes
-                    lp.preferredDisplayModeId = highestMode.modeId
-                    window.attributes = lp
-                }
+                val highestRate = modes.maxByOrNull { it.refreshRate }?.refreshRate ?: return
+                val lp = window.attributes
+                lp.preferredRefreshRate = highestRate
+                window.attributes = lp
             }
         } catch (e: Throwable) {
-            android.util.Log.w("RefreshRate", "Failed to set display refresh rate: ${e.message}")
+            android.util.Log.w("RefreshRate", "Failed to set preferred refresh rate: ${e.message}")
         }
     }
 

@@ -13,9 +13,9 @@
         android:allowBackup="true"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
-        android:icon="@drawable/ic_launcher_scenefinder"
+        android:icon="@mipmap/ic_launcher_scenefinder"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/ic_launcher_scenefinder"
+        android:roundIcon="@mipmap/ic_launcher_scenefinder"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 

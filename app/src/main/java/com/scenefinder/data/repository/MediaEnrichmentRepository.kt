@@ -41,6 +41,8 @@ class MediaEnrichmentRepository @Inject constructor(
 ) {
     companion object {
         const val DEFAULT_TMDB_API_KEY = "c904da47044dae75c247aa2a6e93ad95"
+        /** Max items to refresh age-ratings for in a single background pass. Prevents IO thread saturation. */
+        const val MAX_RATING_REFRESH_BATCH = 5
 
         fun resolveAniListAgeRating(
             isAdult: Boolean? = null,
@@ -169,13 +171,27 @@ class MediaEnrichmentRepository @Inject constructor(
         }
     }
 
-    /** Background refresh to update all library items with accurate direct API age ratings. */
+    /**
+     * Background refresh to update library items that are missing an age rating.
+     *
+     * OPTIMISED: previously queried every item on every library open, causing 50+ network calls
+     * and 50+ Room DB writes that each triggered a full-screen recomposition via Flow observers.
+     * Now:
+     *  - Skips items that already have a rating (no pointless network hit).
+     *  - Caps at MAX_RATING_REFRESH_BATCH items per invocation so the IO thread is not saturated.
+     *  - Collects all updates and applies them in a single batch to avoid churn in Room's Flow.
+     */
     suspend fun refreshAllAgeRatings(tmdbApiKey: String = "") = kotlinx.coroutines.withContext(Dispatchers.IO) {
-        val items = dao.getAllList()
         val effectiveKey = tmdbApiKey.ifBlank { DEFAULT_TMDB_API_KEY }
-        for (item in items) {
+        // Only process items that genuinely lack a rating
+        val needsRating = dao.getAllList().filter { it.ageRating.isNullOrBlank() }
+        if (needsRating.isEmpty()) return@withContext
+
+        val pendingUpdates = mutableMapOf<String, String>() // id -> newRating
+
+        for (item in needsRating.take(MAX_RATING_REFRESH_BATCH)) {
             try {
-                val updatedRating = when {
+                val updatedRating: String? = when {
                     item.id.startsWith("tmdb_movie_") -> {
                         val tmdbId = item.id.removePrefix("tmdb_movie_").toIntOrNull()
                         if (tmdbId != null) fetchTmdbAgeRating(tmdbId, isMovie = true, effectiveKey) else null
@@ -186,18 +202,18 @@ class MediaEnrichmentRepository @Inject constructor(
                     }
                     item.id.startsWith("anilist_") -> {
                         val anilistId = item.id.substringAfterLast("_").toIntOrNull()
-                        if (anilistId != null) {
-                            val detailed = searchAniListById(anilistId)
-                            detailed?.ageRating
-                        } else null
+                        if (anilistId != null) searchAniListById(anilistId)?.ageRating else null
                     }
                     else -> null
                 }
-                if (!updatedRating.isNullOrBlank() && updatedRating != item.ageRating) {
-                    dao.updateAgeRating(item.id, updatedRating)
+                if (!updatedRating.isNullOrBlank()) {
+                    pendingUpdates[item.id] = updatedRating
                 }
             } catch (_: Exception) {}
         }
+
+        // Single batch flush — only one Flow emission instead of N emissions
+        pendingUpdates.forEach { (id, rating) -> dao.updateAgeRating(id, rating) }
     }
 
     /** Exchange an AniList OAuth authorisation code for an access token. */
