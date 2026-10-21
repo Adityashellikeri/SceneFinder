@@ -1696,57 +1696,25 @@ private fun StatusSelectionDialog(
 private fun FlashyAppLogo(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .size(30.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.5.dp))
+            .border(
+                0.85.dp,
                 Brush.linearGradient(
                     listOf(
                         Color(0xFF00F2FE), // Cyber Cyan
-                        Color(0xFF2563EB), // Electric Blue
-                        Color(0xFF38EF7D)  // Neon Emerald
+                        Color(0xFF0A84FF)  // Electric Blue
                     )
-                )
-            )
-            .padding(1.5.dp)
-            .clip(RoundedCornerShape(6.5.dp))
-            .background(Color(0xFF080D1A)),
-        contentAlignment = Alignment.Center
-    ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(17.dp)) {
-            val w = size.width
-            val h = size.height
-
-            // Glowing cinematic play prism
-            val playPath = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.28f, h * 0.18f)
-                lineTo(w * 0.82f, h * 0.50f)
-                lineTo(w * 0.28f, h * 0.82f)
-                close()
-            }
-            drawPath(
-                path = playPath,
-                brush = Brush.linearGradient(
-                    listOf(Color(0xFF00F2FE), Color(0xFF38EF7D))
-                )
-            )
-
-            // High-tech horizontal scanner laser line
-            drawLine(
-                brush = Brush.horizontalGradient(
-                    listOf(Color.Transparent, Color.White, Color(0xFF00F2FE), Color.Transparent)
                 ),
-                start = androidx.compose.ui.geometry.Offset(0f, h * 0.5f),
-                end = androidx.compose.ui.geometry.Offset(w, h * 0.5f),
-                strokeWidth = 1.5.dp.toPx()
+                RoundedCornerShape(8.5.dp)
             )
-
-            // Optical focal point
-            drawCircle(
-                color = Color.White,
-                radius = 1.5.dp.toPx(),
-                center = androidx.compose.ui.geometry.Offset(w * 0.48f, h * 0.5f)
-            )
-        }
+    ) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = com.scenefinder.R.mipmap.ic_launcher_scenefinder),
+            contentDescription = "SceneFinder Logo",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
     }
 }
 
@@ -1788,55 +1756,101 @@ private fun IGTopBar(
         ) { searchActive ->
             if (searchActive) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        placeholder = { Text("Search anime, movies, manga, manhwa...", color = IGTextTertiary, fontSize = 14.sp) },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f).focusRequester(focusRequester),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = IGCard,
-                            unfocusedContainerColor = IGCard,
-                            focusedTextColor = IGTextPrimary,
-                            unfocusedTextColor = IGTextPrimary,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = IGBlue
-                        ),
-                        leadingIcon = {
+                    // Sleek, compact glass search bar (38dp height)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(19.dp))
+                            .background(Color(0x20FFFFFF))
+                            .border(0.75.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(19.dp))
+                            .padding(horizontal = 12.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             if (isSearchingOnline) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = IGGradMid)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(15.dp),
+                                    strokeWidth = 1.8.dp,
+                                    color = Color(0xFF00F2FE)
+                                )
                             } else {
-                                Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp), tint = IGTextSecondary)
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = Color(0xFF8688A0),
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
-                        },
-                        trailingIcon = {
+                            Spacer(Modifier.width(8.dp))
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Search anime, manga, movies...",
+                                        color = Color(0xFF8688A0),
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = onSearchQueryChange,
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(focusRequester),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF00F2FE)),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(onSearch = { onSearch() })
+                                )
+                            }
                             if (searchQuery.isNotBlank()) {
-                                IconButton(onClick = { onSearchQueryChange("") }) {
-                                    Icon(Icons.Outlined.Close, null, tint = IGTextSecondary, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0x33FFFFFF))
+                                        .clickable { onSearchQueryChange("") },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Close,
+                                        contentDescription = "Clear",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
+                                    )
                                 }
                             }
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { onSearch() })
-                    )
-                    Spacer(Modifier.width(8.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
                     Text(
-                        "Cancel",
-                        color = IGBlue,
-                        fontSize = 14.sp,
+                        text = "Cancel",
+                        color = Color(0xFF00F2FE),
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { onSearchToggle() }
+                        modifier = Modifier
+                            .clickable { onSearchToggle() }
+                            .padding(vertical = 4.dp, horizontal = 2.dp)
                     )
                     LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 }
             } else {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Title and Logo (Guaranteed single line, never wraps vertically)
@@ -1845,25 +1859,30 @@ private fun IGTopBar(
                         modifier = Modifier.weight(1f)
                     ) {
                         FlashyAppLogo()
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "SceneFinder",
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                brush = Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF00F2FE), // Cyber Cyan
-                                        Color(0xFF38EF7D), // Emerald Neon
-                                        Color(0xFFFFFFFF)  // Pure White
+                        Spacer(Modifier.width(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Scene",
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = (-0.7).sp,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    brush = Brush.horizontalGradient(
+                                        listOf(
+                                            Color(0xFF00F2FE), // Cyber Cyan
+                                            Color(0xFF0A84FF)  // Electric Blue
+                                        )
                                     )
                                 )
-                            ),
-                            letterSpacing = (-0.3).sp
-                        )
+                            )
+                            Text(
+                                text = "Finder",
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.Light,
+                                letterSpacing = 0.4.sp,
+                                color = Color.White
+                            )
+                        }
                     }
 
                     // Merged Discover & Settings Action Button with Quick Dropdown
@@ -1971,13 +1990,8 @@ private fun IGPosterCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Fast, lightweight tactile press & selection scale animation
-    val targetScale = if (isPressed) 0.94f else if (isSelected) 0.95f else 1.0f
-    val scale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = tween(120),
-        label = "poster_scale"
-    )
+    // Lightweight press scale: avoid running heavy animateFloatAsState on hundreds of idle cards during scroll!
+    val scale = if (isPressed) 0.94f else if (isSelected) 0.95f else 1.0f
 
     // Border: static when unselected to avoid allocating animation state per card
     val borderWidth = if (isSelected) 2.5.dp else 0.5.dp

@@ -21,8 +21,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -151,6 +153,9 @@ private val RankBrushBronze = Brush.horizontalGradient(listOf(Color(0xFFCD7F32),
 private val RankBrushDefault = Brush.horizontalGradient(
     listOf(Color.Black.copy(alpha = 0.82f), Color.Black.copy(alpha = 0.82f))
 )
+
+// Guard so database deduplication only runs once per app session (prevents Room invalidation on tab switch)
+private var hasRunDeduplicationOnce = false
 
 @Composable
 fun HomeScreen(
@@ -394,8 +399,11 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            repository.cleanupDuplicateHistory()
+        if (!hasRunDeduplicationOnce) {
+            hasRunDeduplicationOnce = true
+            withContext(Dispatchers.IO) {
+                repository.cleanupDuplicateHistory()
+            }
         }
         if (discoverItems.isEmpty()) {
             fetchDiscover("Anime")
@@ -463,20 +471,16 @@ fun HomeScreen(
         // Ambient glow drawn directly on canvas — no extra Box composables, zero overdraw cost
         // Glow centres are now in real canvas pixel coords to avoid shader NaN/overflow on LTPO panels
         if (isDarkMode) {
-            Box(modifier = Modifier.fillMaxSize().drawBehind({
-                val cyanGlow = Brush.radialGradient(
-                    colors = listOf(CyanAccent.copy(alpha = 0.11f), Color.Transparent),
-                    radius = size.width * 0.85f,
-                    center = androidx.compose.ui.geometry.Offset(size.width, 0f)
+            val bgGradient = remember {
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF0B0F1C),
+                        Color(0xFF07080E),
+                        Color(0xFF07080E)
+                    )
                 )
-                val purpleGlow = Brush.radialGradient(
-                    colors = listOf(PurpleAccent.copy(alpha = 0.07f), Color.Transparent),
-                    radius = size.width * 0.95f,
-                    center = androidx.compose.ui.geometry.Offset(0f, size.height * 0.4f)
-                )
-                drawRect(brush = cyanGlow)
-                drawRect(brush = purpleGlow)
-            }))
+            }
+            Box(modifier = Modifier.fillMaxSize().background(bgGradient))
         }
 
         LazyColumn(
@@ -484,7 +488,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 120.dp)
         ) {
-            // Header Top Bar with Safe Insets
+            // Header Top Bar with Safe Insets, Custom App Logo, and Stylish Typography
             item {
                 Row(
                     modifier = Modifier
@@ -496,15 +500,49 @@ fun HomeScreen(
                     Column {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(
-                                text = "SceneFinder",
-                                fontSize = 26.sp,
-                                fontWeight = FontWeight.Black,
-                                color = colors.textPrimary,
-                                letterSpacing = (-0.6).sp
-                            )
+                            // Custom App Icon Badge
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .border(
+                                        0.85.dp,
+                                        Brush.linearGradient(listOf(CyanAccent, BlueAccent)),
+                                        RoundedCornerShape(9.dp)
+                                    )
+                            ) {
+                                Image(
+                                    painter = painterResource(id = com.scenefinder.R.mipmap.ic_launcher_scenefinder),
+                                    contentDescription = "SceneFinder Logo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+
+                            // Stylish App Name Typography
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Scene",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = (-0.8).sp,
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        brush = Brush.horizontalGradient(
+                                            listOf(CyanAccent, BlueAccent)
+                                        )
+                                    )
+                                )
+                                Text(
+                                    text = "Finder",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Light,
+                                    letterSpacing = 0.4.sp,
+                                    color = colors.textPrimary
+                                )
+                            }
+
                             // Apple-style Frosted Glass Pill Badge
                             Box(
                                 modifier = Modifier
@@ -515,7 +553,7 @@ fun HomeScreen(
                                         CyanAccent.copy(alpha = 0.45f),
                                         RoundedCornerShape(20.dp)
                                     )
-                                    .padding(horizontal = 9.dp, vertical = 3.5.dp)
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -532,7 +570,7 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(3.dp))
                         Text(
                             text = "Discover personalized anime, manga & movies",
                             fontSize = 12.sp,
@@ -1346,18 +1384,17 @@ private fun CinematicHeroCard(
     ) {
         // Ambient soft backdrop glow drawn on canvas (zero extra composables or overdraw)
         if (isDark) {
+            val auraBrush = remember(auraColor) {
+                Brush.radialGradient(
+                    colors = listOf(auraColor.copy(alpha = 0.16f), Color.Transparent)
+                )
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(8.dp)
                     .drawBehind {
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(auraColor.copy(alpha = 0.16f), Color.Transparent),
-                                radius = size.width * 0.75f,
-                                center = center
-                            )
-                        )
+                        drawCircle(brush = auraBrush, radius = size.width * 0.75f, center = center)
                     }
             )
         }
