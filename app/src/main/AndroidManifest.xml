@@ -37,7 +37,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="scenefinder"
+                    android:scheme="ark"
                     android:host="anilist-callback" />
             </intent-filter>
             <!-- TMDB OAuth callback deep link -->
@@ -46,7 +46,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="scenefinder"
+                    android:scheme="ark"
                     android:host="tmdb-callback" />
             </intent-filter>
 

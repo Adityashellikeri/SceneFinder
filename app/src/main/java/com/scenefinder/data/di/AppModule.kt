@@ -25,6 +25,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import com.scenefinder.BuildConfig
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -44,11 +45,18 @@ object AppModule {
     @Singleton
     fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient {
         val cache = okhttp3.Cache(context.cacheDir.resolve("http_cache"), 50L * 1024 * 1024)
-        return OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .cache(cache)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .build()
+        // Only log network traffic in debug builds to avoid leaking API keys in logs
+        if (BuildConfig.DEBUG) {
+            val logging = HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            }
+            builder.addInterceptor(logging)
+        }
+        return builder.build()
     }
 
     @Provides

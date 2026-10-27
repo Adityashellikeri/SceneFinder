@@ -377,7 +377,7 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         val id = clientIdInput.trim().ifBlank { "53626" }
-                        val redirect = redirectUriInput.trim().ifBlank { "scenefinder://anilist-callback" }
+                            val redirect = redirectUriInput.trim().ifBlank { "ark://anilist-callback" }
                         val url = "https://anilist.co/api/v2/oauth/authorize?client_id=$id&redirect_uri=${Uri.encode(redirect)}&response_type=token"
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK })
                     },
@@ -501,11 +501,11 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = fieldColors,
-                    placeholder = { Text("scenefinder://anilist-callback", color = IGTextTertiary, fontSize = 12.sp) }
+                    placeholder = { Text("ark://anilist-callback", color = IGTextTertiary, fontSize = 12.sp) }
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Use scenefinder://anilist-callback as the redirect URI in your AniList app settings.",
+                    "Use ark://anilist-callback as the redirect URI in your AniList app settings.",
                     fontSize = 11.sp,
                     color = IGTextTertiary
                 )
@@ -533,7 +533,7 @@ fun SettingsScreen(
                             settings.setAnilistClientSecret(clientSecretInput)
                             settings.setAnilistRedirectUri(redirectUriInput)
                             val id = clientIdInput.trim()
-                            val redirect = redirectUriInput.trim().ifBlank { "scenefinder://anilist-callback" }
+                                val redirect = redirectUriInput.trim().ifBlank { "ark://anilist-callback" }
                             val url = "https://anilist.co/api/v2/oauth/authorize" +
                                 "?client_id=$id&redirect_uri=${Uri.encode(redirect)}&response_type=code"
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK })
@@ -667,7 +667,7 @@ fun SettingsScreen(
                                     repository.getTmdbRequestToken(key)
                                 }
                                 if (token != null) {
-                                    val approveUrl = "https://www.themoviedb.org/authenticate/$token?redirect_to=scenefinder://tmdb-callback"
+                                    val approveUrl = "https://www.themoviedb.org/authenticate/$token?redirect_to=ark://tmdb-callback"
                                     context.startActivity(
                                         Intent(Intent.ACTION_VIEW, Uri.parse(approveUrl)).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
                                     )
@@ -1345,7 +1345,144 @@ fun SettingsScreen(
             }
         }
 
-        // ── About SceneFinder & System Specs ──────────────────────────────────
+        // ── Powered By / Attribution ───────────────────────────────────────────
+        item {
+            val colors = LocalAppColors.current
+            IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                IGSettingsSectionHeader(
+                    icon = Icons.Default.Hub,
+                    title = "Powered By",
+                    subtitle = "Data sources & third-party services"
+                )
+                Spacer(Modifier.height(14.dp))
+
+                // TMDB Required Attribution Banner
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFF01B4E4).copy(alpha = 0.18f),
+                                    Color(0xFF90CEA1).copy(alpha = 0.12f)
+                                )
+                            )
+                        )
+                        .border(1.dp, Color(0xFF01B4E4).copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(Color(0xFF01B4E4), Color(0xFF90CEA1))
+                                        )
+                                    )
+                            )
+                            Text(
+                                "TMDB",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF01B4E4)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF01B4E4).copy(alpha = 0.15f))
+                                    .padding(horizontal = 6.dp, vertical = 1.dp)
+                            ) {
+                                Text("Required Attribution", fontSize = 9.sp, color = Color(0xFF01B4E4), fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                            fontSize = 11.5.sp,
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Movie, TV series and person data is sourced from The Movie Database (TMDB).",
+                            fontSize = 11.sp,
+                            color = colors.textSecondary,
+                            lineHeight = 15.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.themoviedb.org")).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                    )
+                                }
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.OpenInNew, null, tint = Color(0xFF01B4E4), modifier = Modifier.size(11.dp))
+                            Text("themoviedb.org", fontSize = 11.sp, color = Color(0xFF01B4E4), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Other data sources
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        Triple("AniList", "Anime & Manga metadata + library sync", "https://anilist.co") to Color(0xFF02A9FF),
+                        Triple("trace.moe", "AI anime scene reverse image search", "https://trace.moe") to Color(0xFFBF00FF),
+                        Triple("MangaDex", "Manga metadata & cover art", "https://mangadex.org") to Color(0xFFFF6600)
+                    ).forEach { (src, color) ->
+                        val (name, desc, url) = src
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.card)
+                                .clickable {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                    )
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
+                                Column {
+                                    Text(name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
+                                    Text(desc, fontSize = 10.5.sp, color = colors.textSecondary)
+                                }
+                            }
+                            Icon(Icons.Default.OpenInNew, null, tint = colors.textTertiary, modifier = Modifier.size(13.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── About Ark & System Specs ───────────────────────────────────────────
         item {
             val colors = LocalAppColors.current
             IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -1370,12 +1507,15 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(key, fontSize = 11.5.sp, color = colors.textSecondary)
-                            Text(value, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                            Text(value, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
                         }
                     }
                 }
             }
         }
+
+        // Bottom padding
+        item { Spacer(Modifier.height(32.dp)) }
     }
 
     if (showClearDialog) {

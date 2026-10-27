@@ -33,7 +33,7 @@ class AppSettings @Inject constructor(
     private val _anilistClientSecret = MutableStateFlow(prefs.getString(KEY_ANILIST_CLIENT_SECRET, "") ?: "")
     val anilistClientSecret: StateFlow<String> = _anilistClientSecret.asStateFlow()
 
-    private val _anilistRedirectUri = MutableStateFlow(prefs.getString(KEY_ANILIST_REDIRECT_URI, "scenefinder://anilist-callback") ?: "scenefinder://anilist-callback")
+    private val _anilistRedirectUri = MutableStateFlow(prefs.getString(KEY_ANILIST_REDIRECT_URI, "ark://anilist-callback") ?: "ark://anilist-callback")
     val anilistRedirectUri: StateFlow<String> = _anilistRedirectUri.asStateFlow()
 
     private val _autoOverlay = MutableStateFlow(prefs.getBoolean(KEY_AUTO_OVERLAY, true))
