@@ -617,9 +617,9 @@ private fun PopupHeader(onDismiss: () -> Unit) {
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
-                    text = "SceneFinder",
+                    text = "Ark",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     color = colors.textPrimary
                 )
                 Text(

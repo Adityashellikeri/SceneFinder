@@ -268,7 +268,7 @@ class SceneAccessibilityService : AccessibilityService() {
             addView(iconView)
 
             val textView = TextView(context).apply {
-                text = "SceneFinder"
+                text = "Ark"
                 setTextColor(Color.WHITE)
                 textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD

@@ -235,7 +235,7 @@ class MainActivity : ComponentActivity() {
             val timeout = settings.armTimeoutSeconds.value
             sessionManager.arm(timeout)
             launcher.tryActionAssist(this)
-            Toast.makeText(this, "SceneFinder Armed (${timeout}s)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Ark Armed (${timeout}s)", Toast.LENGTH_SHORT).show()
         }
     }
 

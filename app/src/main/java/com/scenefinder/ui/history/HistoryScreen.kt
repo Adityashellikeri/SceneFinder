@@ -2089,29 +2089,20 @@ private fun IGTopBar(
                     ) {
                         FlashyAppLogo()
                         Spacer(Modifier.width(10.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Scene",
-                                fontSize = 21.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = (-0.7).sp,
-                                style = androidx.compose.ui.text.TextStyle(
-                                    brush = Brush.horizontalGradient(
-                                        listOf(
-                                            Color(0xFF00F2FE), // Cyber Cyan
-                                            Color(0xFF0A84FF)  // Electric Blue
-                                        )
+                        Text(
+                            text = "Ark",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp,
+                            style = androidx.compose.ui.text.TextStyle(
+                                brush = Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF00F2FE), // Cyber Cyan
+                                        Color(0xFFFF00C8)  // Neon Magenta
                                     )
                                 )
                             )
-                            Text(
-                                text = "Finder",
-                                fontSize = 21.sp,
-                                fontWeight = FontWeight.Light,
-                                letterSpacing = 0.4.sp,
-                                color = Color.White
-                            )
-                        }
+                        )
                     }
 
                     // Merged Discover & Settings Action Button with Quick Dropdown
@@ -2140,7 +2131,7 @@ private fun IGTopBar(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Outlined.Explore, contentDescription = null, tint = Color(0xFF00F2FE), modifier = Modifier.size(18.dp))
                                         Spacer(Modifier.width(10.dp))
-                                        Text("Discover SceneFinder", color = IGTextPrimary, fontSize = 13.5.sp)
+                                        Text("Discover Ark", color = IGTextPrimary, fontSize = 13.5.sp)
                                     }
                                 },
                                 onClick = {

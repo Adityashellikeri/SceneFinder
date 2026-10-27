@@ -93,7 +93,7 @@ fun DebugScreen(
         item {
             Column {
                 Text(
-                    text = "SceneFinder Testing",
+                    text = "Ark Testing",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = NeonAccent

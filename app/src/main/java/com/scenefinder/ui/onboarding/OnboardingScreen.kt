@@ -137,7 +137,7 @@ fun OnboardingScreen(
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Discover SceneFinder",
+                        text = "Discover Ark",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.headlineLarge.copy(brush = headerGradient)
@@ -402,16 +402,16 @@ fun OnboardingScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "How to Arm SceneFinder",
+                        text = "How to Arm Ark",
                         fontWeight = FontWeight.Bold,
                         color = IGBlue,
                         fontSize = 15.sp
                     )
                     Spacer(Modifier.height(10.dp))
                     listOf(
-                        "1. Quick Settings Tile" to "Pull down notification shade, tap Edit, and drag 'SceneFinder' into your active tiles for 1-tap arming.",
-                        "2. App Launcher Shortcut" to "Long-press the SceneFinder app icon on your home screen and select 'Arm SceneFinder'.",
-                        "3. In-App Floating Dock" to "Tap the floating arm trigger inside SceneFinder whenever you're ready to search."
+                        "1. Quick Settings Tile" to "Pull down notification shade, tap Edit, and drag 'Ark' into your active tiles for 1-tap arming.",
+                        "2. App Launcher Shortcut" to "Long-press the Ark app icon on your home screen and select 'Arm Ark'.",
+                        "3. In-App Floating Dock" to "Tap the floating arm trigger inside Ark whenever you're ready to search."
                     ).forEach { (shortcutTitle, shortcutDesc) ->
                         Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             Text(shortcutTitle, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, color = IGTextPrimary)

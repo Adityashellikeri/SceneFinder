@@ -188,7 +188,7 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Configure your SceneFinder accounts and preferences",
+                    text = "Configure your Ark accounts and preferences",
                     color = IGTextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -1071,7 +1071,7 @@ fun SettingsScreen(
                 ) {
                     IGSettingsSectionHeader(
                         icon = Icons.Default.HelpOutline,
-                        title = "How SceneFinder Works",
+                        title = "How Ark Works",
                         subtitle = "Gesture & recognition guide"
                     )
                     Text(
@@ -1089,10 +1089,10 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(top = 14.dp)) {
                         listOf(
-                            Triple("1", "Arm SceneFinder", "Tap the SceneFinder Quick Settings tile from your Android status bar, or use the floating dock."),
+                            Triple("1", "Arm Ark", "Tap the Ark Quick Settings tile from your Android status bar, or use the floating dock."),
                             Triple("2", "Trigger Circle to Search", "Long-press the bottom navigation pill or Home button on any screen to start Circle to Search."),
                             Triple("3", "Circle Scene or Character", "Draw a circle around the anime scene, movie clip, actor, or manga panel you want to recognize."),
-                            Triple("4", "Instant Enrichment & Sync", "SceneFinder captures the scene, queries our AI visual engines, and displays the exact episode timestamp, synopsis, and 1-tap AniList/TMDB sync!")
+                            Triple("4", "Instant Enrichment & Sync", "Ark captures the scene, queries our AI visual engines, and displays the exact episode timestamp, synopsis, and 1-tap AniList/TMDB sync!")
                         ).forEach { (step, stepTitle, stepDesc) ->
                             Row(
                                 modifier = Modifier
@@ -1358,7 +1358,7 @@ fun SettingsScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(
-                        "SceneFinder Engine" to "v2.4.2 (Universal Enrichment)",
+                        "Ark Engine" to "v2.4.2 (Universal Enrichment)",
                         "Architecture" to "Jetpack Compose 1.7 / Material 3",
                         "Local Database" to "Room SQLite with FTS4 Search",
                         "Display Refresh Engine" to "120Hz LTPO Adaptive Mode Active",

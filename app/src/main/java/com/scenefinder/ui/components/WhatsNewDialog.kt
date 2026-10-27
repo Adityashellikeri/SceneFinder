@@ -172,7 +172,7 @@ fun WhatsNewDialog(
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = "SceneFinder v$version Release",
+                                text = "Ark v$version Release",
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF00F2FE),
                                 fontWeight = FontWeight.SemiBold

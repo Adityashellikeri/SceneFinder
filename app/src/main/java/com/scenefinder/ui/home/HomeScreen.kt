@@ -534,33 +534,24 @@ fun HomeScreen(
                             ) {
                                 Image(
                                     painter = painterResource(id = com.scenefinder.R.mipmap.ic_launcher_scenefinder),
-                                    contentDescription = "SceneFinder Logo",
+                                    contentDescription = "Ark Logo",
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
                                 )
                             }
 
                             // Stylish Cyberpunk App Name Typography
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Scene",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = (-0.8).sp,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        brush = Brush.horizontalGradient(
-                                            listOf(CyanAccent, MagentaAccent)
-                                        )
+                            Text(
+                                text = "Ark",
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.5.sp,
+                                style = androidx.compose.ui.text.TextStyle(
+                                    brush = Brush.horizontalGradient(
+                                        listOf(CyanAccent, MagentaAccent)
                                     )
                                 )
-                                Text(
-                                    text = "Finder",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Light,
-                                    letterSpacing = 0.4.sp,
-                                    color = colors.textPrimary
-                                )
-                            }
+                            )
 
                             // Cyberpunk Frosted Glass Pill Badge
                             Box(
