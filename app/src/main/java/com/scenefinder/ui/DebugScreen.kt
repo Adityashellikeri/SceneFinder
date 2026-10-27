@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,6 +45,7 @@ import com.scenefinder.domain.session.SessionManager
 import com.scenefinder.domain.session.SessionState
 import com.scenefinder.service.CircleToSearchLauncher
 import com.scenefinder.service.SceneAccessibilityService
+import com.scenefinder.ui.onboarding.PermissionHelper
 import com.scenefinder.ui.theme.DarkBackground
 import com.scenefinder.ui.theme.DarkSurface
 import com.scenefinder.ui.theme.DarkSurfaceVariant
@@ -155,6 +157,55 @@ fun DebugScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Force Disarm")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Live System Permissions Card
+        item {
+            val hasAccessibility = remember { PermissionHelper.isAccessibilityServiceEnabled(context) }
+            val hasOverlay = remember { PermissionHelper.canDrawOverlays(context) }
+            val hasNotification = remember { PermissionHelper.areNotificationsEnabled(context) }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("System Integration & Permissions", fontWeight = FontWeight.SemiBold, color = NeonAccent)
+                    Spacer(Modifier.height(8.dp))
+
+                    listOf<Pair<String, Boolean>>(
+                        Pair("Accessibility Service", hasAccessibility),
+                        Pair("Display Over Other Apps", hasOverlay),
+                        Pair("Push Notifications", hasNotification)
+                    ).forEach { (name, isGranted) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(name, fontSize = 13.sp, color = Color.White)
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (isGranted) NeonGreen.copy(alpha = 0.2f) else NeonRed.copy(alpha = 0.2f),
+                                        RoundedCornerShape(4.dp)
+                                    )
+                                    .border(1.dp, if (isGranted) NeonGreen else NeonRed, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isGranted) "GRANTED" else "MISSING",
+                                    color = if (isGranted) NeonGreen else NeonRed,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

@@ -41,6 +41,16 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.AutoAwesome
+import com.scenefinder.data.local.dao.EnrichedMediaDao
+import com.scenefinder.ui.components.InAppUpdateMessage
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
@@ -103,6 +113,9 @@ fun SettingsScreen(
     settings: AppSettings,
     repository: MediaEnrichmentRepository,
     modifier: Modifier = Modifier,
+    dao: EnrichedMediaDao? = null,
+    onShowWhatsNew: (() -> Unit)? = null,
+    onNotifyUpdate: ((InAppUpdateMessage) -> Unit)? = null,
     onBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -118,6 +131,8 @@ fun SettingsScreen(
     val tmdbSessionId by settings.tmdbSessionId.collectAsState()
     val tmdbAccountId by settings.tmdbAccountId.collectAsState()
 
+    val userLibrary by dao?.getAllHistory()?.collectAsState(initial = emptyList()) ?: remember { mutableStateOf(emptyList()) }
+
     var apiKeyInput by remember(currentApiKey) { mutableStateOf(currentApiKey) }
     var clientIdInput by remember(currentClientId) { mutableStateOf(currentClientId) }
     var clientSecretInput by remember(currentClientSecret) { mutableStateOf(currentClientSecret) }
@@ -127,6 +142,7 @@ fun SettingsScreen(
     var isSyncing by remember { mutableStateOf(false) }
     var tmdbLoginPending by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showHowItWorks by remember { mutableStateOf(false) }
 
     val isAnilistConnected = currentToken.isNotBlank()
     val isTmdbConnected = tmdbSessionId.isNotBlank() && tmdbAccountId >= 0
@@ -233,6 +249,13 @@ fun SettingsScreen(
                             else
                                 "✅ AniList: synced (library empty)"
                             isSyncing = false
+                            onNotifyUpdate?.invoke(
+                                InAppUpdateMessage(
+                                    title = "AniList Synced",
+                                    description = if (count > 0) "Synced $count items to library" else "Library is up to date",
+                                    accentColor = IGGradMid
+                                )
+                            )
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -276,6 +299,13 @@ fun SettingsScreen(
                             else
                                 "✅ TMDB: connected & synced (watchlist empty)"
                             isSyncing = false
+                            onNotifyUpdate?.invoke(
+                                InAppUpdateMessage(
+                                    title = "TMDB Synced",
+                                    description = if (count > 0) "Synced $count items to watchlist" else "Watchlist is up to date",
+                                    accentColor = IGBlue
+                                )
+                            )
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -913,36 +943,436 @@ fun SettingsScreen(
             }
         }
 
-        // Clear History & Library option at the very last
+        // ── Recognition Engines & Service Health ──────────────────────────────
         item {
+            val colors = LocalAppColors.current
             IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                 IGSettingsSectionHeader(
-                    icon = Icons.Default.DeleteOutline,
-                    title = "Library & History Storage",
-                    subtitle = "Manage your scanned entries and local library"
+                    icon = Icons.Default.Hub,
+                    title = "Recognition Engines & Health",
+                    subtitle = "Live status of connected identification & metadata APIs"
                 )
                 Spacer(Modifier.height(14.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // trace.moe
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("trace.moe Visual AI", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
+                            Text("Anime frame & scene identification", fontSize = 11.sp, color = colors.textSecondary)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(IGGreen.copy(alpha = 0.15f))
+                                .border(0.5.dp, IGGreen.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text("Operational", color = IGGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // TMDB API
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
+                            Text("Movies, TV shows, seasons & episode guide", fontSize = 11.sp, color = colors.textSecondary)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (isTmdbConnected) IGBlue.copy(alpha = 0.15f) else IGGreen.copy(alpha = 0.15f))
+                                .border(0.5.dp, if (isTmdbConnected) IGBlue.copy(alpha = 0.4f) else IGGreen.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(if (isTmdbConnected) "Sync Active" else "Ready", color = if (isTmdbConnected) IGBlue else IGGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // AniList GraphQL
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("AniList GraphQL", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
+                            Text("Anime & Manga synchronization", fontSize = 11.sp, color = colors.textSecondary)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (isAnilistConnected) IGGreen.copy(alpha = 0.15f) else colors.surface)
+                                .border(0.5.dp, if (isAnilistConnected) IGGreen.copy(alpha = 0.4f) else colors.divider, RoundedCornerShape(20.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(if (isAnilistConnected) "Connected" else "Standby", color = if (isAnilistConnected) IGGreen else colors.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Accessibility Screen Reader
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Circle-to-Search Screen Reader", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
+                            Text("Accessibility service node listener", fontSize = 11.sp, color = colors.textSecondary)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(IGGreen.copy(alpha = 0.15f))
+                                .border(0.5.dp, IGGreen.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text("Armed Engine", color = IGGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── How SceneFinder Works (Expandable Guide) ─────────────────────────
+        item {
+            val colors = LocalAppColors.current
+            IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showHowItWorks = !showHowItWorks },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IGSettingsSectionHeader(
+                        icon = Icons.Default.HelpOutline,
+                        title = "How SceneFinder Works",
+                        subtitle = "Gesture & recognition guide"
+                    )
+                    Text(
+                        if (showHowItWorks) "Hide ▲" else "View ▼",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = IGGradMid
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = showHowItWorks,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Column(modifier = Modifier.padding(top = 14.dp)) {
+                        listOf(
+                            Triple("1", "Arm SceneFinder", "Tap the SceneFinder Quick Settings tile from your Android status bar, or use the floating dock."),
+                            Triple("2", "Trigger Circle to Search", "Long-press the bottom navigation pill or Home button on any screen to start Circle to Search."),
+                            Triple("3", "Circle Scene or Character", "Draw a circle around the anime scene, movie clip, actor, or manga panel you want to recognize."),
+                            Triple("4", "Instant Enrichment & Sync", "SceneFinder captures the scene, queries our AI visual engines, and displays the exact episode timestamp, synopsis, and 1-tap AniList/TMDB sync!")
+                        ).forEach { (step, stepTitle, stepDesc) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(IGGradMid),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(step, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(stepTitle, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colors.textPrimary)
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(stepDesc, fontSize = 11.5.sp, color = colors.textSecondary, lineHeight = 16.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Library & History Storage ─────────────────────────────────────────
+        item {
+            val colors = LocalAppColors.current
+            val totalItems = userLibrary.size
+            val watchingCount = userLibrary.count { it.userStatus.equals("CURRENT", true) }
+            val completedCount = userLibrary.count { it.userStatus.equals("COMPLETED", true) }
+            val planningCount = userLibrary.count { it.userStatus.equals("PLANNING", true) }
+            val animeCount = userLibrary.count { it.mediaType.equals("Anime", true) }
+            val mangaCount = userLibrary.count { it.mediaType.equals("Manga", true) || it.mediaType.equals("Manhwa", true) }
+            val movieCount = userLibrary.count { it.mediaType.equals("Movie", true) }
+            val tvCount = userLibrary.count { it.mediaType.equals("TV Series", true) || it.mediaType.equals("Web Series", true) }
+
+            IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                IGSettingsSectionHeader(
+                    icon = Icons.Default.Storage,
+                    title = "Library & Storage Diagnostics",
+                    subtitle = "Local SQLite database and cached assets"
+                )
+                Spacer(Modifier.height(14.dp))
+
+                // Stats grid
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Total stored
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$totalItems", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = IGGradMid)
+                            Text("Total Saved", fontSize = 10.sp, color = colors.textSecondary)
+                        }
+                    }
+                    // Watching
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$watchingCount", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color(0xFF0095F6))
+                            Text("Watching", fontSize = 10.sp, color = colors.textSecondary)
+                        }
+                    }
+                    // Completed
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$completedCount", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = IGGreen)
+                            Text("Completed", fontSize = 10.sp, color = colors.textSecondary)
+                        }
+                    }
+                    // Planning
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.card)
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$planningCount", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color(0xFFA855F7))
+                            Text("Plan to Watch", fontSize = 10.sp, color = colors.textSecondary)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Media type breakdown row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "Anime: $animeCount",
+                        "Manga: $mangaCount",
+                        "Movies: $movieCount",
+                        "TV: $tvCount"
+                    ).forEach { chipText ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(colors.card)
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(chipText, fontSize = 10.sp, color = colors.textSecondary, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // Clear Image Cache button
+                Button(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                context.cacheDir.deleteRecursively()
+                            } catch (_: Throwable) {}
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Asset & image cache freed successfully", Toast.LENGTH_SHORT).show()
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Cache Cleared",
+                                        description = "Temporary asset & image cache freed",
+                                        accentColor = Color(0xFF10B981)
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.card,
+                        contentColor = colors.textPrimary
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(0.5.dp, colors.divider),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CleaningServices,
+                        contentDescription = "Clear Cache",
+                        modifier = Modifier.size(16.dp),
+                        tint = IGGradMid
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Clear Temporary Image Cache", fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Clear All History & Library button
                 Button(
                     onClick = { showClearDialog = true },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = IGRed.copy(alpha = 0.15f),
+                        containerColor = IGRed.copy(alpha = 0.12f),
                         contentColor = IGRed
                     ),
                     shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, IGRed.copy(alpha = 0.4f)),
+                    border = BorderStroke(1.dp, IGRed.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteForever,
                         contentDescription = "Clear History",
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "Clear All History & Library",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.5.sp
+                        fontSize = 12.5.sp
                     )
+                }
+            }
+        }
+
+        // ── What's New & Release Notes Card ───────────────────────────────────
+        if (onShowWhatsNew != null) {
+            item {
+                val colors = LocalAppColors.current
+                IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IGSettingsSectionHeader(
+                            icon = Icons.Default.AutoAwesome,
+                            title = "Release Notes & Updates",
+                            subtitle = "Explore features in version 2.4.2"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(IGGradMid.copy(alpha = 0.18f))
+                                .border(0.5.dp, IGGradMid, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text("v2.4.2", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = IGGradMid)
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Button(
+                        onClick = onShowWhatsNew,
+                        colors = ButtonDefaults.buttonColors(containerColor = IGCard),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(0.5.dp, colors.divider),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = IGGradMid,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "View What's New Tour",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── About SceneFinder & System Specs ──────────────────────────────────
+        item {
+            val colors = LocalAppColors.current
+            IGSettingsCard(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                IGSettingsSectionHeader(
+                    icon = Icons.Default.Info,
+                    title = "System & Engine Specifications",
+                    subtitle = "Application build and runtime environment"
+                )
+                Spacer(Modifier.height(14.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(
+                        "SceneFinder Engine" to "v2.4.2 (Universal Enrichment)",
+                        "Architecture" to "Jetpack Compose 1.7 / Material 3",
+                        "Local Database" to "Room SQLite with FTS4 Search",
+                        "Display Refresh Engine" to "120Hz LTPO Adaptive Mode Active",
+                        "Screen Reader Service" to "Foreground Accessibility Engine"
+                    ).forEach { (key, value) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(key, fontSize = 11.5.sp, color = colors.textSecondary)
+                            Text(value, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+                        }
+                    }
                 }
             }
         }
@@ -967,6 +1397,13 @@ fun SettingsScreen(
                             repository.clearAllHistory()
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context, "History cleared successfully", Toast.LENGTH_SHORT).show()
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Library Reset",
+                                        description = "Local history & scanned entries cleared",
+                                        accentColor = Color(0xFFEF4444)
+                                    )
+                                )
                             }
                         }
                     },
@@ -989,12 +1426,23 @@ fun SettingsScreen(
 @Composable
 private fun IGSettingsCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val colors = LocalAppColors.current
+    val cardBorder = if (colors.isDark) {
+        Brush.horizontalGradient(
+            listOf(
+                Color(0xFF00F5FF).copy(alpha = 0.25f),
+                Color(0xFFBF00FF).copy(alpha = 0.15f),
+                Color(0xFF00F5FF).copy(alpha = 0.10f)
+            )
+        )
+    } else {
+        Brush.horizontalGradient(listOf(colors.divider, colors.divider))
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(colors.surface)
-            .border(0.5.dp, colors.divider, RoundedCornerShape(16.dp))
+            .border(1.dp, cardBorder, RoundedCornerShape(18.dp))
             .padding(16.dp)
     ) {
         Column { content() }
@@ -1007,15 +1455,20 @@ private fun IGSettingsSectionHeader(icon: ImageVector, title: String, subtitle: 
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(colors.card),
+                .size(38.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(if (colors.isDark) Color(0xFF161B32) else colors.card)
+                .border(
+                    0.8.dp,
+                    if (colors.isDark) Color(0xFF00F5FF).copy(alpha = 0.35f) else Color.Transparent,
+                    RoundedCornerShape(11.dp)
+                ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = IGGradMid, modifier = Modifier.size(18.dp))
+            Icon(icon, null, tint = IGGradMid, modifier = Modifier.size(19.dp))
         }
         Column {
-            Text(title, fontWeight = FontWeight.SemiBold, color = colors.textPrimary, fontSize = 15.sp)
+            Text(title, fontWeight = FontWeight.Bold, color = colors.textPrimary, fontSize = 15.sp)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.textSecondary)
         }
     }

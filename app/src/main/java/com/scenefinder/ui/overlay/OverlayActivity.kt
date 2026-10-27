@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +63,7 @@ import androidx.compose.runtime.collectAsState
 import com.scenefinder.ui.theme.DarkSurface
 import com.scenefinder.ui.theme.DarkSurfaceVariant
 import com.scenefinder.ui.theme.NeonAccent
+import com.scenefinder.ui.theme.NeonMagenta
 import com.scenefinder.ui.theme.NeonGreen
 import com.scenefinder.ui.theme.NeonOrange
 import com.scenefinder.ui.theme.SceneFinderTheme
@@ -309,12 +311,21 @@ fun OverlayMediaCard(
     onOpenWeb: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val neonBorderBrush = remember {
+        Brush.linearGradient(
+            listOf(
+                NeonAccent.copy(alpha = 0.9f),
+                NeonMagenta.copy(alpha = 0.7f),
+                NeonAccent.copy(alpha = 0.5f)
+            )
+        )
+    }
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = DarkSurface),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.5.dp, NeonAccent, RoundedCornerShape(16.dp))
+            .border(1.2.dp, neonBorderBrush, RoundedCornerShape(18.dp))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -424,14 +435,32 @@ fun OverlayMediaCard(
             }
 
             if (!media.overview.isNullOrBlank()) {
+                var isOverviewExpanded by remember { mutableStateOf(false) }
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = media.overview,
-                    fontSize = 12.sp,
-                    color = Color.LightGray,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .clickable { isOverviewExpanded = !isOverviewExpanded }
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = media.overview,
+                        fontSize = 12.sp,
+                        color = Color(0xFFD1D5DB),
+                        maxLines = if (isOverviewExpanded) 8 else 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 16.sp
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = if (isOverviewExpanded) "Show less ▲" else "Read more ▼",
+                        fontSize = 10.5.sp,
+                        color = NeonAccent,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(Modifier.height(10.dp))

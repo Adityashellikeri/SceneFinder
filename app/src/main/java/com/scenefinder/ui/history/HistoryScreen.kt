@@ -107,6 +107,7 @@ import com.scenefinder.data.local.dao.EnrichedMediaDao
 import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.ui.components.AgeRatingBadge
 import com.scenefinder.ui.components.ProgressTrackingDialog
+import com.scenefinder.ui.components.InAppUpdateMessage
 import com.scenefinder.data.prefs.AppSettings
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.ui.theme.IGBlack
@@ -319,7 +320,8 @@ fun HistoryScreen(
     startInSearch: Boolean = false,
     onBackToHome: () -> Unit = {},
     onNavigateToDiscover: () -> Unit = {},
-    onNavigateToSettings: () -> Unit = {}
+    onNavigateToSettings: () -> Unit = {},
+    onNotifyUpdate: ((InAppUpdateMessage) -> Unit)? = null
 ) {
     val historyList by dao.getAllHistory().collectAsState(initial = emptyList())
     val context = LocalContext.current
@@ -412,6 +414,14 @@ fun HistoryScreen(
             }
             isCloudSyncing = false
             Toast.makeText(context, "Synced: AniList ($aniCount) | TMDB ($tmdbCount)", Toast.LENGTH_SHORT).show()
+            onNotifyUpdate?.invoke(
+                InAppUpdateMessage(
+                    title = "Cloud Sync Complete",
+                    subtitle = "Updated $aniCount AniList & $tmdbCount TMDB titles",
+                    icon = Icons.Default.Refresh,
+                    accentColor = Color(0xFF00F2FE)
+                )
+            )
         }
     }
 
@@ -444,8 +454,27 @@ fun HistoryScreen(
         }
     }
 
+    val deduplicatedLibrary = remember(historyList) {
+        historyList
+            .groupBy { it.cleanTitle.trim().lowercase() }
+            .values
+            .map { group ->
+                group.maxWithOrNull(
+                    compareBy<EnrichedMediaEntity> {
+                        when (it.userStatus.uppercase()) {
+                            "COMPLETED" -> 4
+                            "CURRENT" -> 3
+                            "PAUSED", "REPEATING" -> 2
+                            "PLANNING" -> 1
+                            else -> 0
+                        }
+                    }.thenBy { it.cachedAt }
+                ) ?: group.first()
+            }
+    }
+
     // Predictive live search as the user types (with 280ms debounce)
-    LaunchedEffect(searchQuery) {
+    LaunchedEffect(searchQuery, startInSearch) {
         val query = searchQuery.trim()
         if (query.isEmpty()) {
             hasSearched = false
@@ -456,6 +485,20 @@ fun HistoryScreen(
         }
 
         hasSearched = true
+
+        if (!startInSearch) {
+            // IN LIBRARY MODE: Search ONLY from local library
+            isSearchingOnline = false
+            val localMatches = deduplicatedLibrary.filter {
+                it.cleanTitle.contains(query, ignoreCase = true) ||
+                (it.englishTitle?.contains(query, ignoreCase = true) == true) ||
+                (it.originalTitle?.contains(query, ignoreCase = true) == true)
+            }
+            searchResults = localMatches
+            predictedSuggestions = localMatches.map { it.cleanTitle }.distinct().take(6)
+            return@LaunchedEffect
+        }
+
         isSearchingOnline = true
 
         // 1. Immediately match against user's local library (0ms latency)
@@ -496,6 +539,18 @@ fun HistoryScreen(
         val query = searchQuery.trim()
         if (query.isEmpty()) return
         keyboardController?.hide()
+        if (!startInSearch) {
+            hasSearched = true
+            isSearchingOnline = false
+            val localMatches = deduplicatedLibrary.filter {
+                it.cleanTitle.contains(query, ignoreCase = true) ||
+                (it.englishTitle?.contains(query, ignoreCase = true) == true) ||
+                (it.originalTitle?.contains(query, ignoreCase = true) == true)
+            }
+            searchResults = localMatches
+            predictedSuggestions = localMatches.map { it.cleanTitle }.distinct().take(6)
+            return
+        }
         isSearchingOnline = true
         hasSearched = true
         scope.launch(Dispatchers.IO) {
@@ -520,27 +575,16 @@ fun HistoryScreen(
         }
     }
 
-    val deduplicatedLibrary = remember(historyList) {
-        historyList
-            .groupBy { it.cleanTitle.trim().lowercase() }
-            .values
-            .map { group ->
-                group.maxWithOrNull(
-                    compareBy<EnrichedMediaEntity> {
-                        when (it.userStatus.uppercase()) {
-                            "COMPLETED" -> 4
-                            "CURRENT" -> 3
-                            "PAUSED", "REPEATING" -> 2
-                            "PLANNING" -> 1
-                            else -> 0
-                        }
-                    }.thenBy { it.cachedAt }
-                ) ?: group.first()
-            }
-    }
-
-    val filteredLibrary = remember(deduplicatedLibrary, selectedStatusFilter, selectedMediaTypeFilter) {
+    val filteredLibrary = remember(deduplicatedLibrary, selectedStatusFilter, selectedMediaTypeFilter, searchQuery, startInSearch) {
         var list = deduplicatedLibrary
+        if (!startInSearch && searchQuery.isNotBlank()) {
+            val q = searchQuery.trim()
+            list = list.filter {
+                it.cleanTitle.contains(q, ignoreCase = true) ||
+                (it.englishTitle?.contains(q, ignoreCase = true) == true) ||
+                (it.originalTitle?.contains(q, ignoreCase = true) == true)
+            }
+        }
         if (selectedStatusFilter != "ALL") {
             list = list.filter { it.userStatus == selectedStatusFilter }
         }
@@ -659,6 +703,14 @@ fun HistoryScreen(
                             }
                             launch(Dispatchers.Main) {
                                 Toast.makeText(context, "Marked ${targets.size} as Completed", Toast.LENGTH_SHORT).show()
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Status: Completed",
+                                        subtitle = "Marked ${targets.size} item(s) as Completed",
+                                        icon = Icons.Default.CheckCircle,
+                                        accentColor = Color(0xFF10B981)
+                                    )
+                                )
                             }
                         }
                         selectedMediaIds = emptySet()
@@ -682,6 +734,14 @@ fun HistoryScreen(
                             }
                             launch(Dispatchers.Main) {
                                 Toast.makeText(context, "Marked ${targets.size} as Watching", Toast.LENGTH_SHORT).show()
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Status: Watching",
+                                        subtitle = "Set ${targets.size} item(s) to In Progress",
+                                        icon = Icons.Default.PlayArrow,
+                                        accentColor = Color(0xFF0A84FF)
+                                    )
+                                )
                             }
                         }
                         selectedMediaIds = emptySet()
@@ -705,6 +765,14 @@ fun HistoryScreen(
                             }
                             launch(Dispatchers.Main) {
                                 Toast.makeText(context, "Marked ${targets.size} as Plan to Watch", Toast.LENGTH_SHORT).show()
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Added to Watchlist",
+                                        subtitle = "Set ${targets.size} item(s) to Plan to Watch",
+                                        icon = Icons.Default.BookmarkAdded,
+                                        accentColor = Color(0xFFA855F7)
+                                    )
+                                )
                             }
                         }
                         selectedMediaIds = emptySet()
@@ -728,6 +796,14 @@ fun HistoryScreen(
                             }
                             launch(Dispatchers.Main) {
                                 Toast.makeText(context, "Marked ${targets.size} as Dropped", Toast.LENGTH_SHORT).show()
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Status: Dropped",
+                                        subtitle = "Moved ${targets.size} item(s) to Dropped",
+                                        icon = Icons.Default.Cancel,
+                                        accentColor = Color(0xFFEF4444)
+                                    )
+                                )
                             }
                         }
                         selectedMediaIds = emptySet()
@@ -750,6 +826,14 @@ fun HistoryScreen(
                             }
                             launch(Dispatchers.Main) {
                                 Toast.makeText(context, "Removed ${targets.size} items", Toast.LENGTH_SHORT).show()
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Library Updated",
+                                        subtitle = "Removed ${targets.size} item(s) from Library",
+                                        icon = Icons.Default.Delete,
+                                        accentColor = Color(0xFFEF4444)
+                                    )
+                                )
                             }
                         }
                         selectedMediaIds = emptySet()
@@ -759,6 +843,7 @@ fun HistoryScreen(
                 IGTopBar(
                     isSearchActive = isSearchBarActive,
                     searchQuery = searchQuery,
+                    searchPlaceholder = if (startInSearch) "Search anime, manga, movies..." else "Search in your library...",
                     onSearchQueryChange = { q ->
                         searchQuery = q
                         if (q.isBlank()) {
@@ -777,7 +862,21 @@ fun HistoryScreen(
                         }
                     },
                     onSearch = ::performOnlineSearch,
-                    onClearAll = { scope.launch(Dispatchers.IO) { dao.clearAll() } },
+                    onClearAll = {
+                        scope.launch(Dispatchers.IO) {
+                            dao.clearAll()
+                            launch(Dispatchers.Main) {
+                                onNotifyUpdate?.invoke(
+                                    InAppUpdateMessage(
+                                        title = "Library Cleared",
+                                        subtitle = "All saved items and history removed",
+                                        icon = Icons.Default.Delete,
+                                        accentColor = Color(0xFFEF4444)
+                                    )
+                                )
+                            }
+                        }
+                    },
                     showClearAll = historyList.isNotEmpty() && !hasSearched,
                     focusRequester = searchFocusRequester,
                     isSearchingOnline = isSearchingOnline,
@@ -796,7 +895,7 @@ fun HistoryScreen(
         }
 
         // Categorical options bar for Search: Anime, Manga, Movie, Manhwa, Web Series (Pink Row)
-        if (isSearchBarActive) {
+        if (startInSearch) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -890,9 +989,6 @@ fun HistoryScreen(
                     }
                 }
             }
-        }
-
-        if (isSearchBarActive && hasSearched) {
             // Predictive suggestion pills
             if (displayedPredictions.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
@@ -954,6 +1050,32 @@ fun HistoryScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = IGGradMid, strokeWidth = 2.5.dp, modifier = Modifier.size(36.dp))
+                    }
+                }
+            } else if (!hasSearched) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                tint = Color(0xFF00F2FE).copy(alpha = 0.45f),
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Text(
+                                text = "Search across anime, movies, manga & manhwa",
+                                fontSize = 13.sp,
+                                color = IGTextSecondary
+                            )
+                        }
                     }
                 }
             } else if (displayedSearchResults.isEmpty()) {
@@ -1023,33 +1145,50 @@ fun HistoryScreen(
                     IGDividerLine()
                 }
             }
-        } else if (isSearchBarActive && !hasSearched) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 48.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+        } else {
+            // Local library predictive autocomplete suggestions (when searching in Library)
+            if (isSearchBarActive && predictedSuggestions.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = null,
-                            tint = Color(0xFF00F2FE).copy(alpha = 0.45f),
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Text(
-                            text = "Search across anime, movies, manga & manhwa",
-                            fontSize = 13.sp,
-                            color = IGTextSecondary
-                        )
+                        items(
+                            items = predictedSuggestions,
+                            key = { it }
+                        ) { suggestion ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(IGCard)
+                                    .border(1.dp, Color(0xFF00F2FE).copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                                    .clickable {
+                                        searchQuery = suggestion
+                                        keyboardController?.hide()
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = Color(0xFF00F2FE),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(
+                                        text = suggestion,
+                                        color = IGTextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
-        } else {
+
             // Unified Filters Section (Single Clean Bar for Library)
             item(span = { GridItemSpan(maxLineSpan) }) {
                 val isFiltered = selectedStatusFilter != "ALL" || selectedMediaTypeFilter != "ALL"
@@ -1058,6 +1197,33 @@ fun HistoryScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
+                    if (searchQuery.isNotBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${filteredLibrary.size} matching in your library",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF00F2FE)
+                            )
+                            Text(
+                                text = "Clear Search",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFF453A),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { searchQuery = "" }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1170,7 +1336,53 @@ fun HistoryScreen(
             }
 
             if (filteredLibrary.isEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) { IGEmptyState(selectedStatusFilter) }
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    if (searchQuery.isNotBlank()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 70.dp, horizontal = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                tint = Color(0xFF00F2FE).copy(alpha = 0.45f),
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            Text(
+                                text = "No library items matching \"$searchQuery\"",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = IGTextPrimary
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "Try searching another title or check your active status filters",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = IGTextSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Surface(
+                                onClick = { searchQuery = "" },
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0x2200F2FE),
+                                border = BorderStroke(1.dp, Color(0xFF00F2FE).copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = "Clear Search",
+                                    color = Color(0xFF00F2FE),
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        IGEmptyState(selectedStatusFilter)
+                    }
+                }
             } else {
                 items(
                     items = displayedLibrary,
@@ -1408,6 +1620,14 @@ fun HistoryScreen(
                         val target = if (isAnime) "AniList" else "TMDB"
                         val msg = if (synced) "Added as $statusLabel & synced to $target!" else "Added \"${toSave.cleanTitle}\" as $statusLabel"
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        onNotifyUpdate?.invoke(
+                            InAppUpdateMessage(
+                                title = "Saved to Library",
+                                subtitle = "${toSave.cleanTitle} ($statusLabel)",
+                                icon = Icons.Default.BookmarkAdded,
+                                accentColor = Color(0xFF00F2FE)
+                            )
+                        )
                     }
                 }
                 itemToSaveWithStatus = null
@@ -1444,6 +1664,14 @@ fun HistoryScreen(
                         val isManga = m.mediaType.equals("Manga", true) || m.mediaType.equals("Manhwa", true)
                         val unit = if (isManga) "Ch. ${ch ?: 1}" else "Ep. ${ep ?: 1}"
                         Toast.makeText(context, "Progress updated ($unit)", Toast.LENGTH_SHORT).show()
+                        onNotifyUpdate?.invoke(
+                            InAppUpdateMessage(
+                                title = "Progress Saved",
+                                subtitle = "${m.cleanTitle} -> $unit",
+                                icon = Icons.Default.PlayArrow,
+                                accentColor = Color(0xFF00F2FE)
+                            )
+                        )
                     }
                 }
             }
@@ -1723,6 +1951,7 @@ private fun FlashyAppLogo(modifier: Modifier = Modifier) {
 private fun IGTopBar(
     isSearchActive: Boolean,
     searchQuery: String,
+    searchPlaceholder: String = "Search in your library...",
     onSearchQueryChange: (String) -> Unit,
     onSearchToggle: () -> Unit,
     onSearch: () -> Unit,
@@ -1794,7 +2023,7 @@ private fun IGTopBar(
                             Box(modifier = Modifier.weight(1f)) {
                                 if (searchQuery.isEmpty()) {
                                     Text(
-                                        text = "Search anime, manga, movies...",
+                                        text = searchPlaceholder,
                                         color = Color(0xFF8688A0),
                                         fontSize = 13.sp
                                     )
@@ -2048,7 +2277,29 @@ private fun IGPosterCard(
             }
         }
 
-        // Bottom gradient overlay with title, type, and rating
+        // Top-left floating rating badge (minimalist glass aesthetic)
+        val ratingStr = remember(media.rating) { media.rating?.let { "%.1f".format(it) } }
+        if (!isSelected && ratingStr != null) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color.Black.copy(alpha = 0.72f),
+                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f)),
+                modifier = Modifier
+                    .padding(5.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(9.dp))
+                    Text(ratingStr, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = IGYellow)
+                }
+            }
+        }
+
+        // Bottom gradient overlay with clean typography (type + title + meta)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2056,69 +2307,53 @@ private fun IGPosterCard(
                 .background(posterGradientOverlay)
                 .padding(horizontal = 6.dp, vertical = 6.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val typeColor = remember(media.mediaType) { getMediaTypeColor(media.mediaType) }
-                val ratingStr = remember(media.rating) { media.rating?.let { "%.1f".format(it) } }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        // Category pill badge with clear high-contrast backing
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(typeColor.copy(alpha = 0.22f))
-                                .border(0.5.dp, typeColor.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                        ) {
-                            Text(
-                                text = media.mediaType.uppercase(),
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = typeColor,
-                                letterSpacing = 0.4.sp
-                            )
-                        }
-
-                        // Age Rating badge
-                        media.ageRating?.let { age ->
-                            AgeRatingBadge(rating = age, fontSize = 8.sp)
-                        }
-                    }
-
-                    if (ratingStr != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.Black.copy(alpha = 0.6f))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        ) {
-                            Icon(Icons.Default.Star, null, tint = IGYellow, modifier = Modifier.size(9.dp))
-                            Text(" $ratingStr", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = IGYellow)
-                        }
+                    Text(
+                        text = media.mediaType.uppercase(),
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = typeColor,
+                        letterSpacing = 0.5.sp
+                    )
+                    media.ageRating?.let { age ->
+                        Text(
+                            text = "• $age",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.75f)
+                        )
                     }
                 }
 
-                // Show title with dark frosted background for 100% legibility
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .padding(horizontal = 3.dp, vertical = 1.5.dp)
-                ) {
+                Text(
+                    text = media.cleanTitle,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // Extra meta: year + episode/chapter count
+                val isMangaCard = media.mediaType.equals("Manga", true) || media.mediaType.equals("Manhwa", true)
+                val metaCount = when {
+                    isMangaCard && (media.chapter ?: 0) > 0 -> "Ch. ${media.chapter}"
+                    !isMangaCard && (media.episode ?: 0) > 0 -> "Ep. ${media.episode}"
+                    else -> null
+                }
+                val metaYear = media.year?.toString()
+                val metaParts = listOfNotNull(metaYear, metaCount)
+                if (metaParts.isNotEmpty()) {
                     Text(
-                        text = media.cleanTitle,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
+                        text = metaParts.joinToString(" • "),
+                        fontSize = 9.sp,
+                        color = Color.White.copy(alpha = 0.60f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2302,16 +2537,127 @@ private fun MediaDetailDialog(
                     }
                 }
 
-                media.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                // Stats chips: episode count, chapter count, year, source service
+                val isMangaTypeForDetail = media.mediaType.equals("Manga", true) || media.mediaType.equals("Manhwa", true)
+                val hasStats = media.episode != null || media.chapter != null || media.year != null
+                if (hasStats) {
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        overview,
-                        fontSize = 12.sp,
-                        color = IGTextSecondary,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 16.sp
-                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        media.episode?.takeIf { it > 0 }?.let { epCount ->
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = IGBlue.copy(alpha = 0.14f),
+                                    border = BorderStroke(0.75.dp, IGBlue.copy(alpha = 0.45f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, null, tint = IGBlue, modifier = Modifier.size(10.dp))
+                                        Text("$epCount Episodes", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = IGBlue)
+                                    }
+                                }
+                            }
+                        }
+                        media.chapter?.takeIf { it > 0 }?.let { chCount ->
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = IGGreen.copy(alpha = 0.14f),
+                                    border = BorderStroke(0.75.dp, IGGreen.copy(alpha = 0.45f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(Icons.Default.AutoStories, null, tint = IGGreen, modifier = Modifier.size(10.dp))
+                                        Text("$chCount Chapters", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = IGGreen)
+                                    }
+                                }
+                            }
+                        }
+                        media.year?.let { yr ->
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFA855F7).copy(alpha = 0.14f),
+                                    border = BorderStroke(0.75.dp, Color(0xFFA855F7).copy(alpha = 0.45f))
+                                ) {
+                                    Text("$yr", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFA855F7),
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
+                                }
+                            }
+                        }
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = IGTextSecondary.copy(alpha = 0.10f),
+                                border = BorderStroke(0.75.dp, IGTextSecondary.copy(alpha = 0.25f))
+                            ) {
+                                Text(
+                                    media.sourceService,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = IGTextSecondary,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Full synopsis with expand/collapse
+                media.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                    var synopsisExpanded by remember { mutableStateOf(false) }
+                    Spacer(Modifier.height(10.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0x14FFFFFF))
+                            .border(0.5.dp, Color(0x22FFFFFF), RoundedCornerShape(10.dp))
+                            .clickable { synopsisExpanded = !synopsisExpanded }
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            "SYNOPSIS",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = IGTextTertiary,
+                            letterSpacing = 0.7.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            overview,
+                            fontSize = 12.sp,
+                            color = IGTextSecondary,
+                            maxLines = if (synopsisExpanded) Int.MAX_VALUE else 3,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 17.sp
+                        )
+                        if (!synopsisExpanded && overview.length > 120) {
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "Read more \u25be",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = IGGradMid
+                            )
+                        } else if (synopsisExpanded) {
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "Show less \u25b4",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = IGGradMid
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(14.dp))
@@ -2324,7 +2670,8 @@ private fun MediaDetailDialog(
                 )
                 Spacer(Modifier.height(8.dp))
 
-                // Convenient status selector rows
+                // Convenient status selector rows with descriptive subtexts
+                val isMangaForStatus = media.mediaType.equals("Manga", true) || media.mediaType.equals("Manhwa", true)
                 val statusOptions = listOf(
                     Triple("CURRENT", "Watching", Color(0xFF0095F6)),
                     Triple("PLANNING", "Plan to Watch", Color(0xFFA855F7)),
@@ -2353,6 +2700,12 @@ private fun MediaDetailDialog(
                             animationSpec = tween(200),
                             label = "status_row_text"
                         )
+                        val subText = when (code) {
+                            "CURRENT" -> if (isMangaForStatus) "Currently reading chapter" else "Currently watching episode"
+                            "PLANNING" -> "Saved to your watchlist"
+                            "COMPLETED" -> if (isMangaForStatus) "All chapters finished" else "All episodes finished"
+                            else -> "Stopped watching / reading"
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2379,12 +2732,15 @@ private fun MediaDetailDialog(
                                         .background(color)
                                  )
                                 Spacer(Modifier.width(10.dp))
-                                Text(
-                                    label,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = rowTextColor
-                                )
+                                Column {
+                                    Text(
+                                        label,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = rowTextColor
+                                    )
+                                    Text(subText, fontSize = 10.sp, color = IGTextTertiary)
+                                }
                             }
                             AnimatedVisibility(
                                 visible = isSelected,

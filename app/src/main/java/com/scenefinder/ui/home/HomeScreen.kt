@@ -112,8 +112,11 @@ import com.scenefinder.data.local.entity.EnrichedMediaEntity
 import com.scenefinder.data.prefs.AppSettings
 import com.scenefinder.data.repository.MediaEnrichmentRepository
 import com.scenefinder.ui.components.AgeRatingBadge
+import com.scenefinder.ui.components.CyberpunkGridBackground
+import com.scenefinder.ui.components.NeonPulsingDot
 import com.scenefinder.ui.components.ProgressTrackingDialog
-import com.scenefinder.ui.theme.LocalAppColors
+import com.scenefinder.ui.components.InAppUpdateMessage
+import com.scenefinder.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -122,28 +125,29 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// Apple Liquid Glass Design System
-private val GlassDark = Color(0xB8131627)
-private val GlassLight = Color(0xEEFFFFFF)
-private val CyanAccent = Color(0xFF00F2FE)
+// Cyberpunk HUD & Neon Glass Design System
+private val GlassDark = Color(0xF2090D1C)
+private val GlassLight = Color(0xF8FFFFFF)
+private val CyanAccent = NeonCyan
 private val BlueAccent = Color(0xFF0A84FF)
-private val PurpleAccent = Color(0xFFBF5AF2)
-private val GoldAccent = Color(0xFFFFD60A)
-private val GreenAccent = Color(0xFF30D158)
-private val OrangeAccent = Color(0xFFFF9F0A)
-private val DarkBg = Color(0xFF07080E)
+private val PurpleAccent = NeonViolet
+private val MagentaAccent = NeonMagenta
+private val GoldAccent = NeonYellowGreen
+private val GreenAccent = NeonGreenLime
+private val OrangeAccent = NeonOrangePink
+private val DarkBg = CyberBlack
 
-private val HeroRimBrush = Brush.verticalGradient(
-    listOf(Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.08f), Color.Transparent)
+private val HeroRimBrush = Brush.linearGradient(
+    listOf(NeonCyan.copy(alpha = 0.50f), NeonMagenta.copy(alpha = 0.35f), Color.Transparent)
 )
 private val HeroScrimBrush = Brush.verticalGradient(
-    listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent, Color.Black.copy(alpha = 0.70f), Color.Black.copy(alpha = 0.95f))
+    listOf(Color.Black.copy(alpha = 0.30f), Color.Transparent, Color.Black.copy(alpha = 0.75f), Color.Black.copy(alpha = 0.96f))
 )
-private val CompactRimBrush = Brush.verticalGradient(
-    listOf(Color.White.copy(alpha = 0.30f), Color.White.copy(alpha = 0.05f), Color.Transparent)
+private val CompactRimBrush = Brush.linearGradient(
+    listOf(NeonCyan.copy(alpha = 0.40f), NeonViolet.copy(alpha = 0.25f), Color.Transparent)
 )
 private val CompactPosterScrim = Brush.verticalGradient(
-    listOf(Color.Transparent, Color.Transparent, Color.Black.copy(alpha = 0.70f))
+    listOf(Color.Transparent, Color.Transparent, Color.Black.copy(alpha = 0.75f))
 )
 
 // Pre-computed rank badge gradients — allocated once, never reallocated on recomposition
@@ -164,6 +168,8 @@ fun HomeScreen(
     settings: AppSettings,
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onShowWhatsNew: (() -> Unit)? = null,
+    onNotifyUpdate: ((InAppUpdateMessage) -> Unit)? = null,
     onCardClick: (EnrichedMediaEntity) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -326,7 +332,15 @@ fun HomeScreen(
                     if (totalEp != null) "$totalEp episodes" else "all episodes"
                 }
                 val verb = if (isManga) "Read" else "Watched"
-                Toast.makeText(context, "Marked as $verb ($countText) & Synced!", Toast.LENGTH_SHORT).show()
+                val msg = "Marked as $verb ($countText) & Synced!"
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                onNotifyUpdate?.invoke(
+                    InAppUpdateMessage(
+                        title = "Marked as $verb",
+                        description = "${targetItem.cleanTitle} ($countText)",
+                        accentColor = Color(0xFF10B981)
+                    )
+                )
             }
         }
     }
@@ -378,6 +392,13 @@ fun HomeScreen(
                     val target = if (isAnime) "AniList" else "TMDB"
                     val msg = if (synced) "Added as $label & synced to $target!" else "Saved as $label"
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    onNotifyUpdate?.invoke(
+                        InAppUpdateMessage(
+                            title = "Status: $label",
+                            description = media.cleanTitle,
+                            accentColor = Color(0xFF00F2FE)
+                        )
+                    )
                 }
             }
         }
@@ -394,6 +415,13 @@ fun HomeScreen(
             )
             launch(Dispatchers.Main) {
                 Toast.makeText(context, "Removed from Library", Toast.LENGTH_SHORT).show()
+                onNotifyUpdate?.invoke(
+                    InAppUpdateMessage(
+                        title = "Removed from Library",
+                        description = media.cleanTitle,
+                        accentColor = Color(0xFFEF4444)
+                    )
+                )
             }
         }
     }
@@ -471,16 +499,7 @@ fun HomeScreen(
         // Ambient glow drawn directly on canvas — no extra Box composables, zero overdraw cost
         // Glow centres are now in real canvas pixel coords to avoid shader NaN/overflow on LTPO panels
         if (isDarkMode) {
-            val bgGradient = remember {
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF0B0F1C),
-                        Color(0xFF07080E),
-                        Color(0xFF07080E)
-                    )
-                )
-            }
-            Box(modifier = Modifier.fillMaxSize().background(bgGradient))
+            CyberpunkGridBackground()
         }
 
         LazyColumn(
@@ -508,8 +527,8 @@ fun HomeScreen(
                                     .size(34.dp)
                                     .clip(RoundedCornerShape(9.dp))
                                     .border(
-                                        0.85.dp,
-                                        Brush.linearGradient(listOf(CyanAccent, BlueAccent)),
+                                        1.dp,
+                                        Brush.linearGradient(listOf(CyanAccent, MagentaAccent)),
                                         RoundedCornerShape(9.dp)
                                     )
                             ) {
@@ -521,7 +540,7 @@ fun HomeScreen(
                                 )
                             }
 
-                            // Stylish App Name Typography
+                            // Stylish Cyberpunk App Name Typography
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "Scene",
@@ -530,7 +549,7 @@ fun HomeScreen(
                                     letterSpacing = (-0.8).sp,
                                     style = androidx.compose.ui.text.TextStyle(
                                         brush = Brush.horizontalGradient(
-                                            listOf(CyanAccent, BlueAccent)
+                                            listOf(CyanAccent, MagentaAccent)
                                         )
                                     )
                                 )
@@ -543,14 +562,14 @@ fun HomeScreen(
                                 )
                             }
 
-                            // Apple-style Frosted Glass Pill Badge
+                            // Cyberpunk Frosted Glass Pill Badge
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(20.dp))
                                     .background(CyanAccent.copy(alpha = 0.14f))
                                     .border(
                                         0.75.dp,
-                                        CyanAccent.copy(alpha = 0.45f),
+                                        CyanAccent.copy(alpha = 0.65f),
                                         RoundedCornerShape(20.dp)
                                     )
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
@@ -559,13 +578,13 @@ fun HomeScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
-                                    PulsingLiveDot(color = CyanAccent)
+                                    NeonPulsingDot(color = CyanAccent, size = 6.dp)
                                     Text(
                                         text = "AI FEED",
                                         fontSize = 9.5.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = CyanAccent,
-                                        letterSpacing = 0.6.sp
+                                        letterSpacing = 1.sp
                                     )
                                 }
                             }
@@ -583,13 +602,15 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        GlassCircularButton(
-                            icon = Icons.Default.Search,
-                            contentDescription = "Search",
-                            isDark = colors.isDark
-                        ) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onNavigateToSearch()
+                        if (onShowWhatsNew != null) {
+                            GlassCircularButton(
+                                icon = Icons.Default.AutoAwesome,
+                                contentDescription = "What's New",
+                                isDark = colors.isDark
+                            ) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onShowWhatsNew()
+                            }
                         }
                         GlassCircularButton(
                             icon = Icons.Default.Settings,
@@ -599,6 +620,97 @@ fun HomeScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onNavigateToSettings()
                         }
+                    }
+                }
+            }
+
+            // Interactive What's New Release Card
+            if (onShowWhatsNew != null) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        CyanAccent.copy(alpha = 0.12f),
+                                        BlueAccent.copy(alpha = 0.16f)
+                                    )
+                                )
+                            )
+                            .border(
+                                0.75.dp,
+                                CyanAccent.copy(alpha = 0.40f),
+                                RoundedCornerShape(16.dp)
+                            )
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onShowWhatsNew()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(CyanAccent.copy(alpha = 0.22f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = CyanAccent,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Column {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "What's New in v2.4.2",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.textPrimary
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(CyanAccent.copy(alpha = 0.2f))
+                                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = "UPDATES",
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = CyanAccent
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "Expandable synopsis, live engine health, storage analytics & real-time updates",
+                                    fontSize = 11.sp,
+                                    color = colors.textSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        Text(
+                            text = "View →",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyanAccent
+                        )
                     }
                 }
             }
@@ -1249,15 +1361,15 @@ private fun SectionHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Glass Icon container
+            // Cyberpunk HUD Icon container with neon border
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(36.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(accentColor.copy(alpha = 0.16f))
                     .border(
-                        0.75.dp,
-                        accentColor.copy(alpha = 0.45f),
+                        1.dp,
+                        Brush.linearGradient(listOf(accentColor, accentColor.copy(alpha = 0.35f))),
                         RoundedCornerShape(10.dp)
                     ),
                 contentAlignment = Alignment.Center
@@ -1266,16 +1378,16 @@ private fun SectionHeader(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
             Column {
                 Text(
                     text = title,
                     fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     color = colors.textPrimary,
-                    letterSpacing = (-0.3).sp
+                    letterSpacing = (-0.2).sp
                 )
                 Text(
                     text = subtitle,
@@ -1306,10 +1418,10 @@ private fun GlassCircularButton(
         label = "btn_scale"
     )
 
-    val rim = Brush.verticalGradient(
+    val rim = Brush.linearGradient(
         listOf(
-            Color.White.copy(alpha = 0.28f),
-            Color.White.copy(alpha = 0.06f)
+            NeonCyan.copy(alpha = if (isDark) 0.65f else 0.35f),
+            NeonMagenta.copy(alpha = if (isDark) 0.45f else 0.20f)
         )
     )
 
@@ -1318,8 +1430,8 @@ private fun GlassCircularButton(
             .size(size)
             .scale(scale)
             .clip(CircleShape)
-            .background(if (isDark) Color(0x33FFFFFF) else Color(0xCCFFFFFF))
-            .border(BorderStroke(0.8.dp, rim), CircleShape)
+            .background(if (isDark) Color(0xD00D1020) else Color(0xCCFFFFFF))
+            .border(BorderStroke(1.dp, rim), CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1330,7 +1442,7 @@ private fun GlassCircularButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = if (isDark) Color.White else Color(0xFF141624),
+            tint = if (isDark) NeonCyan else Color(0xFF141624),
             modifier = Modifier.size(18.dp)
         )
     }
@@ -2220,16 +2332,127 @@ private fun HomeMediaDetailDialog(
                     }
                 }
 
+                // Stats chips: episodes, chapters, year, source
+                val isMangaTypeHome = media.mediaType.equals("Manga", true) || media.mediaType.equals("Manhwa", true)
+                val hasHomeStats = media.episode != null || media.chapter != null || media.year != null
+                if (hasHomeStats) {
+                    Spacer(Modifier.height(10.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        media.episode?.takeIf { it > 0 }?.let { epCount ->
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = BlueAccent.copy(alpha = 0.14f),
+                                    border = BorderStroke(0.75.dp, BlueAccent.copy(alpha = 0.45f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, null, tint = BlueAccent, modifier = Modifier.size(10.dp))
+                                        Text("$epCount Episodes", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = BlueAccent)
+                                    }
+                                }
+                            }
+                        }
+                        media.chapter?.takeIf { it > 0 }?.let { chCount ->
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = GreenAccent.copy(alpha = 0.14f),
+                                    border = BorderStroke(0.75.dp, GreenAccent.copy(alpha = 0.45f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(Icons.Default.AutoStories, null, tint = GreenAccent, modifier = Modifier.size(10.dp))
+                                        Text("$chCount Chapters", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = GreenAccent)
+                                    }
+                                }
+                            }
+                        }
+                        media.year?.let { yr ->
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = PurpleAccent.copy(alpha = 0.14f),
+                                    border = BorderStroke(0.75.dp, PurpleAccent.copy(alpha = 0.45f))
+                                ) {
+                                    Text("$yr", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = PurpleAccent,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp))
+                                }
+                            }
+                        }
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF6B6E82).copy(alpha = 0.14f),
+                                border = BorderStroke(0.75.dp, Color(0xFF6B6E82).copy(alpha = 0.30f))
+                            ) {
+                                Text(
+                                    media.sourceService,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF9B9EB4),
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Expandable synopsis card
                 media.overview?.takeIf { it.isNotBlank() }?.let { overview ->
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        overview,
-                        fontSize = 12.sp,
-                        color = Color(0xFFB0B3C8),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 16.5.sp
-                    )
+                    var synopsisExpanded by remember { mutableStateOf(false) }
+                    Spacer(Modifier.height(10.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0x14FFFFFF))
+                            .border(0.5.dp, Color(0x22FFFFFF), RoundedCornerShape(10.dp))
+                            .clickable { synopsisExpanded = !synopsisExpanded }
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            "SYNOPSIS",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF6B6E82),
+                            letterSpacing = 0.7.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            overview,
+                            fontSize = 12.sp,
+                            color = Color(0xFFB0B3C8),
+                            maxLines = if (synopsisExpanded) Int.MAX_VALUE else 3,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 17.sp
+                        )
+                        if (!synopsisExpanded && overview.length > 120) {
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "Read more \u25be",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = CyanAccent
+                            )
+                        } else if (synopsisExpanded) {
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "Show less \u25b4",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = CyanAccent
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))

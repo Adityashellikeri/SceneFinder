@@ -24,6 +24,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,6 +48,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -170,13 +178,102 @@ fun OnboardingScreen(
             }
         }
 
+        // Setup Readiness Progress Bar Card
+        item {
+            val grantedCount = listOf(hasAccessibility, hasOverlay, hasNotification).count { it }
+            val progressFraction by animateFloatAsState(
+                targetValue = grantedCount / 3f,
+                animationSpec = tween(400),
+                label = "progress"
+            )
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = IGSurface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(0.5.dp, if (allGranted) IGGreen.copy(alpha = 0.5f) else IGDivider, RoundedCornerShape(16.dp))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "SETUP READINESS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (allGranted) IGGreen else IGGradMid,
+                            letterSpacing = 0.8.sp
+                        )
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (allGranted) IGGreen.copy(alpha = 0.15f) else IGBlue.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .border(
+                                    0.5.dp,
+                                    if (allGranted) IGGreen else IGBlue,
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "$grantedCount of 3 Configured",
+                                color = if (allGranted) IGGreen else IGBlue,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Progress track
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .background(IGCard, RoundedCornerShape(4.dp))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progressFraction)
+                                .height(8.dp)
+                                .background(
+                                    if (allGranted) Brush.horizontalGradient(listOf(IGGreen, Color(0xFF00F2FE)))
+                                    else headerGradient,
+                                    RoundedCornerShape(4.dp)
+                                )
+                        )
+                    }
+
+                    if (allGranted) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = IGGreen, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "All system permissions are granted and ready!",
+                                color = IGGreen,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Checklist Header
         item {
             Text(
-                text = "SYSTEM PERMISSIONS",
+                text = "REQUIRED PERMISSIONS",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = IGGradMid,
+                color = IGTextSecondary,
                 letterSpacing = 0.8.sp
             )
         }
@@ -220,6 +317,80 @@ fun OnboardingScreen(
             )
         }
 
+        // Key Capabilities Showcase
+        item {
+            Text(
+                text = "SCENEFINDER CAPABILITIES",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = IGTextSecondary,
+                letterSpacing = 0.8.sp
+            )
+        }
+
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = IGSurface),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(0.5.dp, IGDivider, RoundedCornerShape(16.dp))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(IGCard),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Bolt, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Zero-Friction Recognition", fontWeight = FontWeight.Bold, color = IGTextPrimary, fontSize = 13.5.sp)
+                            Spacer(Modifier.height(2.dp))
+                            Text("Trigger via Google Circle to Search. Simply circle any scene, video frame, actor, or manga panel to identify it.", style = MaterialTheme.typography.bodySmall, color = IGTextSecondary)
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(IGCard),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Movie, contentDescription = null, tint = IGBlue, modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Universal Media Intelligence", fontWeight = FontWeight.Bold, color = IGTextPrimary, fontSize = 13.5.sp)
+                            Spacer(Modifier.height(2.dp))
+                            Text("Automatic enrichment with TMDB for Movies and Web Series, and AniList & trace.moe for Anime and Manga.", style = MaterialTheme.typography.bodySmall, color = IGTextSecondary)
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(IGCard),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Layers, contentDescription = null, tint = IGGreen, modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Non-Intrusive Floating Cards", fontWeight = FontWeight.Bold, color = IGTextPrimary, fontSize = 13.5.sp)
+                            Spacer(Modifier.height(2.dp))
+                            Text("Results pop up in an elegant floating overlay over YouTube, Netflix, Crunchyroll, or any player without interrupting playback.", style = MaterialTheme.typography.bodySmall, color = IGTextSecondary)
+                        }
+                    }
+                }
+            }
+        }
+
         // Shortcuts & Arming Guidance
         item {
             Card(
@@ -236,12 +407,17 @@ fun OnboardingScreen(
                         color = IGBlue,
                         fontSize = 15.sp
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "1. Quick Settings Tile: Pull down status bar, tap edit, and add the 'SceneFinder' tile for 1-tap arming.\n2. App Shortcut: Long-press the SceneFinder launcher icon and tap 'Arm SceneFinder'.\n3. Inside App: Use the floating dock on screen.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = IGTextSecondary
-                    )
+                    Spacer(Modifier.height(10.dp))
+                    listOf(
+                        "1. Quick Settings Tile" to "Pull down notification shade, tap Edit, and drag 'SceneFinder' into your active tiles for 1-tap arming.",
+                        "2. App Launcher Shortcut" to "Long-press the SceneFinder app icon on your home screen and select 'Arm SceneFinder'.",
+                        "3. In-App Floating Dock" to "Tap the floating arm trigger inside SceneFinder whenever you're ready to search."
+                    ).forEach { (shortcutTitle, shortcutDesc) ->
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text(shortcutTitle, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, color = IGTextPrimary)
+                            Text(shortcutDesc, style = MaterialTheme.typography.bodySmall, color = IGTextSecondary, fontSize = 11.5.sp)
+                        }
+                    }
                 }
             }
         }

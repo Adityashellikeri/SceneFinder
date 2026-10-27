@@ -876,22 +876,33 @@ private fun MergedResultCard(
 
         // Synopsis
         if (!media.overview.isNullOrBlank()) {
+            var isOverviewExpanded by remember { mutableStateOf(false) }
             Spacer(modifier = Modifier.height(12.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (colors.isDark) Color(0xFF0F1524) else Color(0xFFF3F4F6))
+                    .clickable { isOverviewExpanded = !isOverviewExpanded }
                     .padding(12.dp)
             ) {
-                Text(
-                    text = media.overview!!,
-                    color = colors.textPrimary,
-                    fontSize = 12.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 17.sp
-                )
+                Column {
+                    Text(
+                        text = media.overview!!,
+                        color = colors.textPrimary,
+                        fontSize = 12.sp,
+                        maxLines = if (isOverviewExpanded) 12 else 4,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 17.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (isOverviewExpanded) "Show less ▲" else "Read more ▼",
+                        fontSize = 10.5.sp,
+                        color = NeonAccent,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 

@@ -70,9 +70,11 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -90,6 +92,9 @@ import com.scenefinder.ui.history.HistoryScreen
 import com.scenefinder.ui.onboarding.OnboardingScreen
 import com.scenefinder.ui.onboarding.PermissionHelper
 import com.scenefinder.ui.settings.SettingsScreen
+import com.scenefinder.ui.components.WhatsNewDialog
+import com.scenefinder.ui.components.InAppUpdateBanner
+import com.scenefinder.ui.components.InAppUpdateMessage
 import com.scenefinder.ui.theme.IGBlack
 import com.scenefinder.ui.theme.IGBlue
 import com.scenefinder.ui.theme.IGSurface
@@ -354,6 +359,16 @@ private fun MainAppScaffold(
     val tabBackStack = remember { mutableStateListOf(0) }
     val selectedIndex = tabBackStack.lastOrNull() ?: 0
 
+    val lastSeenWhatsNew by settings.lastSeenWhatsNewVersion.collectAsState()
+    var showWhatsNewDialog by remember { mutableStateOf(false) }
+    var updateNotification by remember { mutableStateOf<InAppUpdateMessage?>(null) }
+
+    LaunchedEffect(lastSeenWhatsNew) {
+        if (lastSeenWhatsNew != AppSettings.CURRENT_APP_VERSION) {
+            showWhatsNewDialog = true
+        }
+    }
+
     // Handle back button: if not on Home (tab 0), pop back to previous tab
     BackHandler(enabled = tabBackStack.size > 1) {
         tabBackStack.removeAt(tabBackStack.lastIndex)
@@ -380,71 +395,87 @@ private fun MainAppScaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (selectedIndex in 0..2) {
-                val glassRim = Brush.verticalGradient(
+                // ── Cyberpunk Neon Nav Bar ──
+                val cyberNavBg = if (colors.isDark) Color(0xF0060912) else Color(0xF8FFFFFF)
+                val cyberBorderBrush = Brush.horizontalGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.32f),
-                        Color.White.copy(alpha = 0.06f),
-                        Color.Transparent
+                        Color(0xFF00F5FF).copy(alpha = 0.70f),
+                        Color(0xFFBF00FF).copy(alpha = 0.40f),
+                        Color(0xFFFF00C8).copy(alpha = 0.60f),
+                        Color(0xFF00F5FF).copy(alpha = 0.55f)
                     )
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(28.dp),
-                        color = if (colors.isDark) Color(0xE80D101D) else Color(0xF2FFFFFF),
-                        border = BorderStroke(0.85.dp, glassRim),
-                        shadowElevation = 20.dp,
+                        shape = RoundedCornerShape(26.dp),
+                        color = cyberNavBg,
+                        border = BorderStroke(1.dp, cyberBorderBrush),
+                        shadowElevation = 32.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(60.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 6.dp, vertical = 5.dp),
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             navItems.forEachIndexed { index, item ->
                                 val selected = selectedIndex == index
+                                val tabAccent = when (index) {
+                                    0 -> Color(0xFF00F5FF)   // Home = cyan
+                                    1 -> Color(0xFFBF00FF)   // Library = violet
+                                    else -> Color(0xFFFF00C8) // Search = magenta
+                                }
                                 val iconScale by animateFloatAsState(
-                                    targetValue = if (selected) 1.15f else 1.0f,
+                                    targetValue = if (selected) 1.18f else 1.0f,
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioMediumBouncy,
                                         stiffness = Spring.StiffnessLow
                                     ),
-                                    label = "tab_scale"
+                                    label = "tab_scale_$index"
+                                )
+                                val bgAlpha by animateFloatAsState(
+                                    targetValue = if (selected) 1f else 0f,
+                                    animationSpec = tween(240, easing = FastOutSlowInEasing),
+                                    label = "tab_bg_alpha_$index"
                                 )
 
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
-                                        .clip(RoundedCornerShape(22.dp))
+                                        .clip(RoundedCornerShape(20.dp))
                                         .then(
                                             if (selected) {
                                                 Modifier
                                                     .background(
-                                                        Brush.horizontalGradient(
+                                                        Brush.verticalGradient(
                                                             listOf(
-                                                                Color(0xFF00F2FE).copy(alpha = 0.18f),
-                                                                Color(0xFF0A84FF).copy(alpha = 0.22f)
+                                                                tabAccent.copy(alpha = 0.22f * bgAlpha),
+                                                                tabAccent.copy(alpha = 0.08f * bgAlpha)
                                                             )
                                                         )
                                                     )
                                                     .border(
-                                                        0.75.dp,
-                                                        Color(0xFF00F2FE).copy(alpha = 0.55f),
-                                                        RoundedCornerShape(22.dp)
+                                                        1.dp,
+                                                        Brush.horizontalGradient(
+                                                            listOf(
+                                                                tabAccent.copy(alpha = 0.85f),
+                                                                tabAccent.copy(alpha = 0.30f)
+                                                            )
+                                                        ),
+                                                        RoundedCornerShape(20.dp)
                                                     )
-                                            } else {
-                                                Modifier
-                                            }
+                                            } else Modifier
                                         )
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
@@ -455,9 +486,9 @@ private fun MainAppScaffold(
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
                                         Icon(
                                             imageVector = if (selected) item.selectedIcon else item.icon,
@@ -468,15 +499,22 @@ private fun MainAppScaffold(
                                                     scaleX = iconScale
                                                     scaleY = iconScale
                                                 },
-                                            tint = if (selected) Color(0xFF00F2FE) else if (colors.isDark) Color(0xFF8688A0) else Color(0xFF6B6E82)
+                                            tint = if (selected) tabAccent
+                                                   else if (colors.isDark) Color(0xFF4E5580) else Color(0xFF8B92B8)
                                         )
-                                        AnimatedVisibility(visible = selected) {
+                                        AnimatedVisibility(
+                                            visible = selected,
+                                            enter = fadeIn(tween(120)),
+                                            exit  = fadeOut(tween(60))
+                                        ) {
                                             Text(
-                                                text = item.label,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                letterSpacing = 0.2.sp,
-                                                color = if (colors.isDark) Color.White else Color(0xFF0E111C)
+                                                text          = item.label.uppercase(),
+                                                fontSize      = 8.sp,
+                                                fontWeight    = FontWeight.ExtraBold,
+                                                letterSpacing = 1.5.sp,
+                                                maxLines      = 1,
+                                                softWrap      = false,
+                                                color         = tabAccent
                                             )
                                         }
                                     }
@@ -494,61 +532,79 @@ private fun MainAppScaffold(
                 .padding(bottom = paddingValues.calculateBottomPadding())
                 .background(colors.background)
         ) {
-            Crossfade(
-                targetState = selectedIndex,
-                animationSpec = tween(durationMillis = 140),
-                label = "smooth_screen_crossfade",
-                modifier = Modifier.fillMaxSize()
-            ) { targetIndex ->
-                when (targetIndex) {
-                    0 -> HomeScreen(
-                        dao = dao,
-                        repository = repository,
-                        settings = settings,
-                        onNavigateToSearch = { navigateToTab(2) },
-                        onNavigateToSettings = { navigateToTab(4) }
-                    )
-                    1 -> HistoryScreen(
-                        dao = dao,
-                        repository = repository,
-                        settings = settings,
-                        onNavigateToDiscover = { navigateToTab(2) },
-                        onNavigateToSettings = { navigateToTab(4) }
-                    )
-                    2 -> HistoryScreen(
-                        dao = dao,
-                        repository = repository,
-                        settings = settings,
-                        startInSearch = true,
-                        onBackToHome = {
-                            if (tabBackStack.size > 1) {
-                                tabBackStack.removeAt(tabBackStack.lastIndex)
-                            } else {
-                                navigateToTab(0)
-                            }
-                        },
-                        onNavigateToDiscover = { navigateToTab(2) },
-                        onNavigateToSettings = { navigateToTab(4) }
-                    )
-                    3 -> OnboardingScreen(onContinueToDashboard = {
+            when (selectedIndex) {
+                0 -> HomeScreen(
+                    dao = dao,
+                    repository = repository,
+                    settings = settings,
+                    onNavigateToSearch = { navigateToTab(2) },
+                    onNavigateToSettings = { navigateToTab(4) },
+                    onShowWhatsNew = { showWhatsNewDialog = true },
+                    onNotifyUpdate = { msg -> updateNotification = msg }
+                )
+                1 -> HistoryScreen(
+                    dao = dao,
+                    repository = repository,
+                    settings = settings,
+                    onNavigateToDiscover = { navigateToTab(2) },
+                    onNavigateToSettings = { navigateToTab(4) },
+                    onNotifyUpdate = { msg -> updateNotification = msg }
+                )
+                2 -> HistoryScreen(
+                    dao = dao,
+                    repository = repository,
+                    settings = settings,
+                    startInSearch = true,
+                    onBackToHome = {
                         if (tabBackStack.size > 1) {
                             tabBackStack.removeAt(tabBackStack.lastIndex)
                         } else {
                             navigateToTab(0)
                         }
-                    })
-                    4 -> SettingsScreen(
-                        settings = settings,
-                        repository = repository,
-                        onBack = {
-                            if (tabBackStack.size > 1) {
-                                tabBackStack.removeAt(tabBackStack.lastIndex)
-                            } else {
-                                navigateToTab(0)
-                            }
+                    },
+                    onNavigateToDiscover = { navigateToTab(2) },
+                    onNavigateToSettings = { navigateToTab(4) },
+                    onNotifyUpdate = { msg -> updateNotification = msg }
+                )
+                3 -> OnboardingScreen(onContinueToDashboard = {
+                    if (tabBackStack.size > 1) {
+                        tabBackStack.removeAt(tabBackStack.lastIndex)
+                    } else {
+                        navigateToTab(0)
+                    }
+                })
+                4 -> SettingsScreen(
+                    settings = settings,
+                    repository = repository,
+                    dao = dao,
+                    onBack = {
+                        if (tabBackStack.size > 1) {
+                            tabBackStack.removeAt(tabBackStack.lastIndex)
+                        } else {
+                            navigateToTab(0)
                         }
-                    )
-                }
+                    },
+                    onShowWhatsNew = { showWhatsNewDialog = true },
+                    onNotifyUpdate = { msg -> updateNotification = msg }
+                )
+            }
+
+            // Floating In-App Update Notification Banner
+            InAppUpdateBanner(
+                message = updateNotification,
+                onDismiss = { updateNotification = null },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+
+            // What's New Release Tour Dialog
+            if (showWhatsNewDialog) {
+                WhatsNewDialog(
+                    version = AppSettings.CURRENT_APP_VERSION,
+                    onDismiss = {
+                        settings.setLastSeenWhatsNewVersion(AppSettings.CURRENT_APP_VERSION)
+                        showWhatsNewDialog = false
+                    }
+                )
             }
         }
     }

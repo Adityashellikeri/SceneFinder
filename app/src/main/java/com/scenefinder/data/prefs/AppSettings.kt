@@ -120,7 +120,16 @@ class AppSettings @Inject constructor(
         _themeMode.value = mode
     }
 
+    private val _lastSeenWhatsNewVersion = MutableStateFlow(prefs.getString(KEY_LAST_SEEN_WHATS_NEW, "") ?: "")
+    val lastSeenWhatsNewVersion: StateFlow<String> = _lastSeenWhatsNewVersion.asStateFlow()
+
+    fun setLastSeenWhatsNewVersion(version: String) {
+        prefs.edit().putString(KEY_LAST_SEEN_WHATS_NEW, version).apply()
+        _lastSeenWhatsNewVersion.value = version
+    }
+
     companion object {
+        const val CURRENT_APP_VERSION = "2.4.2"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
         private const val KEY_TMDB_SESSION_ID = "tmdb_session_id"
         private const val KEY_TMDB_ACCOUNT_ID = "tmdb_account_id"
@@ -133,6 +142,7 @@ class AppSettings @Inject constructor(
         private const val KEY_ARM_TIMEOUT = "arm_timeout"
         private const val KEY_PAGE_WISE_LAYOUT = "page_wise_layout"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_LAST_SEEN_WHATS_NEW = "last_seen_whats_new"
     }
 }
 
